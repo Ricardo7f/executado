@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Iguá – Painel Firebase</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#f4f6f9;--card:#fff;--tx:#1b2430;--mut:#6b7686;--bd:#dfe4ec;--ac:#0a7cff;--ok:#12a150;--hd:#eef2f8}
+@media (prefers-color-scheme:dark){:root{--bg:#10141a;--card:#1a2029;--tx:#e6ebf2;--mut:#8f9bab;--bd:#2b3441;--ac:#4da3ff;--ok:#3ccf7e;--hd:#222b37}}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.4 system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--tx)}
+header{padding:14px 20px;background:var(--card);border-bottom:1px solid var(--bd);display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+h1{font-size:18px;margin:0;flex:1}
+main{padding:16px 20px;max-width:1500px;margin:auto}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px;margin-bottom:14px}
+input,select,button{font:inherit;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--tx)}
+button{cursor:pointer;background:var(--ac);color:#fff;border:0;font-weight:600}
+button.sec{background:var(--hd);color:var(--tx);border:1px solid var(--bd)}
+button:disabled{opacity:.5;cursor:wait}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+.row label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mut)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.kpi b{display:block;font-size:26px}
+.kpi span{color:var(--mut);font-size:12px}
+.tw{overflow:auto;max-height:65vh;border:1px solid var(--bd);border-radius:8px}
+table{border-collapse:collapse;width:100%;white-space:nowrap}
+th,td{padding:7px 10px;border-bottom:1px solid var(--bd);text-align:left}
+th{position:sticky;top:0;background:var(--hd);cursor:pointer;user-select:none}
+tr:hover td{background:var(--hd)}
+.bars>div{display:grid;grid-template-columns:minmax(200px,45%) 1fr auto;align-items:center;gap:10px;margin:6px 0;font-size:12px}
+.bars .nome{white-space:normal;word-break:break-word}
+.bars .trilho{min-width:0}
+.bars i{display:block;height:10px;background:var(--ac);border-radius:4px}
+#msg{color:var(--mut);font-size:13px;margin:6px 0}
+.err{color:#d33!important}
+.pg{display:flex;gap:8px;align-items:center;margin-top:10px}
+.hide{display:none}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-bottom:14px}
+.grid2 .card{margin-bottom:0}
+.calwrap{position:relative}
+.cal{position:absolute;top:calc(100% + 6px);left:0;z-index:20;width:290px;background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:10px;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+.calh{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;text-transform:capitalize}
+.calh button{padding:4px 10px}
+.calg{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}
+.calg .sem{font-size:11px;color:var(--mut)}
+.calg .dia{padding:6px 0;background:transparent;color:var(--tx);border:1px solid transparent;font-weight:500}
+.calg .dia:hover{border-color:var(--ac)}
+.calg .dia.ok{background:var(--ok);color:#fff}
+.calg .dia.hoje{border-color:var(--mut)}
+.calg .dia.sel{outline:2px solid var(--ac);outline-offset:1px}
+.leg{margin-top:8px;font-size:12px;color:var(--mut);display:flex;align-items:center;gap:6px}
+.leg i{display:inline-block;width:12px;height:12px;border-radius:3px;background:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <h1>📊 Iguá – Painel Firebase</h1>
+  <span id="user" style="color:var(--mut)"></span>
+  <button class="sec hide" id="sair">Sair</button>
+</header>
+<main>
+  <div class="card" id="login">
+    <div class="row">
+      <label>E-mail<input id="email" type="email" autocomplete="username"></label>
+      <label>Senha<input id="senha" type="password" autocomplete="current-password"></label>
+      <button id="entrar">Entrar</button>
+    </div>
+    <div id="lmsg" class="err"></div>
+  </div>
+
+  <div id="app" class="hide">
+    <div class="card">
+      <div class="row">
+        <label>Grupo / coleção
+          <select id="colecao">
+            <option value="atividades_corte_religacao">Corte e Religação</option>
+            <option value="camel_fiscalizacao_sul">Fiscalização Sul</option>
+          </select>
+        </label>
+        <label>Data a buscar no Firebase (vazio = tudo)
+          <input id="dataBuscar" type="date">
+        </label>
+        <div class="calwrap">
+          <button class="sec" id="calBtn" type="button" title="Ver dias já buscados">📅</button>
+          <div class="cal hide" id="cal"></div>
+        </div>
+        <button id="carregar">Buscar no Firebase</button>
+        <button class="sec" id="limpar">Limpar cache</button>
+        <button class="sec" id="xlsx">Exportar XLSX (filtrado)</button>
+      </div>
+      <div id="msg"></div>
+    </div>
+
+    <div class="card kpis" id="kpis"></div>
+
+    <div class="card">
+      <div class="row">
+        <label>Busca<input id="busca" placeholder="qualquer texto…"></label>
+        <label>Data de referência<select id="fData"></select></label>
+        <label>Serviço<select id="fServ"></select></label>
+        <label>Cidade<select id="fCid"></select></label>
+        <label>Recurso<select id="fRec"></select></label>
+      </div>
+    </div>
+
+    <div class="card"><b>Top serviços (filtrado)</b><div class="bars" id="bars"></div></div>
+
+    <div class="grid2">
+      <div class="card"><b>Top recursos (filtrado)</b><div class="bars" id="barsRec"></div></div>
+      <div class="card"><b>Top cidades (filtrado)</b><div class="bars" id="barsCid"></div></div>
+    </div>
+
+    <div class="card">
+      <div class="tw"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+      <div class="pg">
+        <button class="sec" id="prev">‹</button>
+        <span id="pinfo"></span>
+        <button class="sec" id="next">›</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+const API_KEY = "AIzaSyBas8b0hHPoB8TiqE1nY0hgJYGGd4o0Hh8";
+const PROJECT = "executados-4c21f";
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+const POR_PAG = 100;
+const CAMPO_DESC = 'Descrição do Serviço';
+let token = null, refresh = null, expira = 0;
+let dados = [], colunas = [], filtrado = [], pagina = 0, ordem = {col:null, asc:true};
+let diasBuscados = new Set();          // dias (AAAA-MM-DD) já buscados na coleção atual
+let calMes = new Date(); calMes.setDate(1);
+
+// ---------- Cache local (IndexedDB) ----------
+// Guarda os registros já baixados de cada coleção no navegador, para
+// não precisar ler o Firebase de novo toda vez que a página abrir.
+function abrirDB(){
+  return new Promise((res,rej)=>{
+    const rq=indexedDB.open('igua_painel_cache',1);
+    rq.onupgradeneeded=()=>rq.result.createObjectStore('colecoes');
+    rq.onsuccess=()=>res(rq.result);
+    rq.onerror=()=>rej(rq.error);
+  });
+}
+async function cacheLer(col){
+  try{
+    const db=await abrirDB();
+    return await new Promise((res,rej)=>{
+      const rq=db.transaction('colecoes').objectStore('colecoes').get(col);
+      rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>rej(rq.error);
+    });
+  }catch(e){return null;}
+}
+async function cacheGravar(col,registros,dias){
+  try{
+    const db=await abrirDB();
+    await new Promise((res,rej)=>{
+      const tx=db.transaction('colecoes','readwrite');
+      tx.objectStore('colecoes').put({registros,diasBuscados:[...dias],atualizadoEm:Date.now()},col);
+      tx.oncomplete=res; tx.onerror=()=>rej(tx.error);
+    });
+  }catch(e){console.warn('Não foi possível gravar o cache:',e);}
+}
+async function cacheApagar(col){
+  try{
+    const db=await abrirDB();
+    await new Promise((res,rej)=>{
+      const tx=db.transaction('colecoes','readwrite');
+      tx.objectStore('colecoes').delete(col);
+      tx.oncomplete=res; tx.onerror=()=>rej(tx.error);
+    });
+  }catch(e){}
+}
+
+// ---------- Autenticação ----------
+async function login(email, senha){
+  const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${API_KEY}`,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({email,password:senha,returnSecureToken:true})});
+  const j = await r.json();
+  if(!r.ok) throw new Error(j.error?.message || 'Falha no login');
+  token=j.idToken; refresh=j.refreshToken; expira=Date.now()+(+j.expiresIn*1000)-60000;
+}
+async function getToken(){
+  if(Date.now()<expira) return token;
+  const r = await fetch(`https://securetoken.googleapis.com/v1/token?key=${API_KEY}`,{
+    method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:`grant_type=refresh_token&refresh_token=${encodeURIComponent(refresh)}`});
+  const j = await r.json();
+  if(!r.ok) throw new Error('Sessão expirada, entre novamente.');
+  token=j.id_token; refresh=j.refresh_token; expira=Date.now()+(+j.expires_in*1000)-60000;
+  return token;
+}
+
+// ---------- Firestore ----------
+function valor(v){
+  if('stringValue' in v) return v.stringValue;
+  if('integerValue' in v) return Number(v.integerValue);
+  if('doubleValue' in v) return v.doubleValue;
+  if('booleanValue' in v) return v.booleanValue;
+  if('timestampValue' in v) return v.timestampValue;
+  return '';
+}
+// Descrição em branco = registro descartado (não serve).
+function temDescricao(o){
+  return String(o[CAMPO_DESC] ?? '').trim() !== '';
+}
+function docParaObjeto(d){
+  const o={_id:d.name.split('/').pop()};
+  for(const k in d.fields) o[k]=valor(d.fields[k]);
+  return o;
+}
+// Lê a coleção inteira (lista paginada).
+async function carregarColecao(col){
+  const out=[]; let pageToken='';
+  do{
+    const t = await getToken();
+    const url = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/${col}?pageSize=300`+(pageToken?`&pageToken=${encodeURIComponent(pageToken)}`:'');
+    const r = await fetch(url,{headers:{Authorization:'Bearer '+t}});
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.error?.message || 'Erro ao ler o Firestore');
+    (j.documents||[]).forEach(d=>{ const o=docParaObjeto(d); if(temDescricao(o)) out.push(o); });
+    pageToken=j.nextPageToken||'';
+    $('msg').textContent=`Buscando… ${out.length} registros`;
+  }while(pageToken);
+  return out;
+}
+// Lê só os documentos de uma data de referência (gasta bem menos leituras).
+async function carregarPorData(col,dataISO){
+  const t = await getToken();
+  const r = await fetch(`https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents:runQuery`,{
+    method:'POST',
+    headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'},
+    body:JSON.stringify({structuredQuery:{
+      from:[{collectionId:col}],
+      where:{fieldFilter:{field:{fieldPath:'_dataReferenciaImportacao'},op:'EQUAL',value:{stringValue:dataISO}}}
+    }})});
+  const j = await r.json();
+  if(!r.ok) throw new Error((Array.isArray(j)?j[0]?.error?.message:j.error?.message) || 'Erro ao consultar o Firestore');
+  const out=[];
+  (j||[]).forEach(x=>{ if(x.document){ const o=docParaObjeto(x.document); if(temDescricao(o)) out.push(o); } });
+  return out;
+}
+
+// ---------- UI ----------
+function fmt(v){
+  if(typeof v==='string' && /^\d{4}-\d{2}-\d{2}T/.test(v)){
+    const d=new Date(v); if(!isNaN(d)) return d.toLocaleString('pt-BR');
+  }
+  return v ?? '';
+}
+function opcoes(sel,campo){
+  const atual=$(sel).value;
+  const vals=[...new Set(dados.map(d=>d[campo]).filter(x=>x!==undefined&&x!==''))].sort();
+  $(sel).innerHTML='<option value="">Todos</option>'+vals.map(v=>`<option>${esc(v)}</option>`).join('');
+  if(vals.map(String).includes(atual)) $(sel).value=atual;
+}
+function montarFiltros(){
+  opcoes('fData','_dataReferenciaImportacao'); opcoes('fServ',CAMPO_DESC);
+  opcoes('fCid','Cidade'); opcoes('fRec','Recurso');
+  const pref=['Data','Recurso','Ordem de Serviço',CAMPO_DESC,'Cidade','Hidrômetro','Status da Atividade','Fim do SLA'];
+  const todas=new Set(); dados.forEach(d=>Object.keys(d).forEach(k=>todas.add(k)));
+  todas.delete('_id');
+  colunas=[...pref.filter(c=>todas.has(c)),...[...todas].filter(c=>!pref.includes(c)).sort()];
+}
+function aplicar(){
+  const q=$('busca').value.trim().toLowerCase();
+  const f={_dataReferenciaImportacao:$('fData').value,[CAMPO_DESC]:$('fServ').value,Cidade:$('fCid').value,Recurso:$('fRec').value};
+  filtrado=dados.filter(d=>{
+    for(const k in f) if(f[k] && String(d[k])!==f[k]) return false;
+    if(q && !colunas.some(c=>String(d[c]??'').toLowerCase().includes(q))) return false;
+    return true;
+  });
+  if(ordem.col){
+    const c=ordem.col;
+    filtrado.sort((a,b)=>{
+      const x=a[c]??'',y=b[c]??'';
+      const r=(typeof x==='number'&&typeof y==='number')?x-y:String(x).localeCompare(String(y),'pt-BR',{numeric:true});
+      return ordem.asc?r:-r;
+    });
+  }
+  pagina=0; render();
+}
+function contar(campo,lista){
+  const m={}; lista.forEach(d=>{const k=String(d[campo]).trim(); m[k]=(m[k]||0)+1;}); return m;
+}
+function desenharBarras(idEl,campo,lista){
+  const cont=contar(campo,lista);
+  const top=Object.entries(cont).sort((a,b)=>b[1]-a[1]);
+  const max=top[0]?.[1]||1;
+  $(idEl).innerHTML=top.map(([k,n])=>`<div><span class="nome">${esc(k===''||k==='undefined'?'(vazio)':k)}</span><span class="trilho"><i style="width:${n/max*100}%"></i></span><span>${n}</span></div>`).join('');
+}
+
+// ---------- Calendário dos dias já buscados ----------
+const pad=n=>String(n).padStart(2,'0');
+const isoLocal=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+function renderCal(){
+  const y=calMes.getFullYear(), m=calMes.getMonth();
+  const titulo=new Date(y,m,1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+  const primeiro=new Date(y,m,1).getDay(), total=new Date(y,m+1,0).getDate();
+  const hoje=isoLocal(new Date()), sel=$('dataBuscar').value;
+  let h=`<div class="calh"><button class="sec" type="button" data-nav="-1">‹</button><b>${titulo}</b><button class="sec" type="button" data-nav="1">›</button></div><div class="calg">`;
+  ['D','S','T','Q','Q','S','S'].forEach(s=>h+=`<span class="sem">${s}</span>`);
+  for(let i=0;i<primeiro;i++) h+='<span></span>';
+  for(let d=1;d<=total;d++){
+    const s=`${y}-${pad(m+1)}-${pad(d)}`;
+    const cls=['dia',diasBuscados.has(s)?'ok':'',s===hoje?'hoje':'',s===sel?'sel':''].join(' ');
+    h+=`<button type="button" class="${cls}" data-d="${s}" title="${diasBuscados.has(s)?'Já buscado':'Ainda não buscado'}">${d}</button>`;
+  }
+  h+='</div><div class="leg"><i></i> dia já buscado (clique num dia para escolher a data)</div>';
+  $('cal').innerHTML=h;
+}
+function render(){
+  desenharBarras('bars',CAMPO_DESC,filtrado);
+  desenharBarras('barsRec','Recurso',filtrado);
+  desenharBarras('barsCid','Cidade',filtrado);
+  const cids=new Set(filtrado.map(d=>d.Cidade)).size;
+  const recs=new Set(filtrado.map(d=>d.Recurso)).size;
+  $('kpis').innerHTML=
+    `<div class="kpi"><b>${filtrado.length}</b><span>registros filtrados</span></div>
+     <div class="kpi"><b>${dados.length}</b><span>total no cache</span></div>
+     <div class="kpi"><b>${recs}</b><span>recursos</span></div>
+     <div class="kpi"><b>${cids}</b><span>cidades</span></div>`;
+  $('thead').innerHTML='<tr>'+colunas.map(c=>`<th data-c="${esc(c)}">${esc(c)}${ordem.col===c?(ordem.asc?' ▲':' ▼'):''}</th>`).join('')+'</tr>';
+  const ini=pagina*POR_PAG, fatia=filtrado.slice(ini,ini+POR_PAG);
+  $('tbody').innerHTML=fatia.map(d=>'<tr>'+colunas.map(c=>`<td>${esc(fmt(d[c]))}</td>`).join('')+'</tr>').join('');
+  const tp=Math.max(1,Math.ceil(filtrado.length/POR_PAG));
+  $('pinfo').textContent=`Página ${pagina+1} de ${tp}`;
+  $('prev').disabled=pagina===0; $('next').disabled=pagina>=tp-1;
+}
+function exportarXLSX(){
+  if(!filtrado.length){ $('msg').textContent='Nada para exportar.'; return; }
+  const aoa=[colunas,...filtrado.map(d=>colunas.map(c=>fmt(d[c])))];
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols']=colunas.map(c=>({wch:Math.min(60,Math.max(c.length+2,...filtrado.slice(0,200).map(d=>String(fmt(d[c])).length+2)))}));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Dados');
+  XLSX.writeFile(wb,`${$('colecao').value}_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+// Mostra na tela o que estiver no cache da coleção selecionada.
+async function mostrarCache(){
+  const col=$('colecao').value;
+  const c=await cacheLer(col);
+  dados=((c&&c.registros)||[]).filter(temDescricao);
+  // Dias buscados = os registrados no cache + os que aparecem nos dados.
+  diasBuscados=new Set([...((c&&c.diasBuscados)||[]),...dados.map(o=>o._dataReferenciaImportacao).filter(Boolean)]);
+  renderCal();
+  montarFiltros(); aplicar();
+  $('msg').classList.remove('err');
+  $('msg').textContent=c
+    ? `${dados.length} registros do cache (atualizado em ${new Date(c.atualizadoEm).toLocaleString('pt-BR')}). Nenhuma leitura no Firebase.`
+    : 'Cache vazio. Use "Buscar no Firebase" para carregar dados.';
+}
+
+// ---------- Eventos ----------
+$('entrar').onclick=async()=>{
+  $('lmsg').textContent=''; $('entrar').disabled=true;
+  try{
+    await login($('email').value.trim(),$('senha').value);
+    try{localStorage.setItem('igua_email',$('email').value.trim());}catch(e){}
+    $('login').classList.add('hide'); $('app').classList.remove('hide');
+    $('sair').classList.remove('hide'); $('user').textContent=$('email').value.trim();
+    await mostrarCache();
+  }catch(e){$('lmsg').textContent=e.message;}
+  $('entrar').disabled=false;
+};
+$('senha').onkeydown=e=>{if(e.key==='Enter')$('entrar').click();};
+$('sair').onclick=()=>location.reload();
+$('colecao').onchange=mostrarCache;
+$('carregar').onclick=async()=>{
+  const dia0=$('dataBuscar').value;
+  if(dia0 && diasBuscados.has(dia0) &&
+     !confirm(`O dia ${dia0.split('-').reverse().join('/')} já foi buscado. Buscar de novo (gasta leituras do Firebase)?`)) return;
+  $('carregar').disabled=true; $('msg').classList.remove('err');
+  try{
+    const col=$('colecao').value, dia=dia0;
+    $('msg').textContent='Buscando…';
+    const novos = dia ? await carregarPorData(col,dia) : await carregarColecao(col);
+    // Junta com o que já estava no cache (mesmo _id é substituído).
+    const c=await cacheLer(col);
+    const mapa=new Map(((c&&c.registros)||[]).map(o=>[o._id,o]));
+    novos.forEach(o=>mapa.set(o._id,o));
+    const todos=[...mapa.values()].filter(temDescricao);
+    if(dia) diasBuscados.add(dia);
+    else todos.forEach(o=>{ if(o._dataReferenciaImportacao) diasBuscados.add(o._dataReferenciaImportacao); });
+    await cacheGravar(col,todos,diasBuscados);
+    dados=todos;
+    renderCal();
+    montarFiltros(); aplicar();
+    $('msg').textContent=`${novos.length} registros buscados${dia?` da data ${dia}`:''} às ${new Date().toLocaleTimeString('pt-BR')}. Total no cache: ${dados.length}.`;
+  }catch(e){$('msg').textContent=e.message;$('msg').classList.add('err');}
+  $('carregar').disabled=false;
+};
+$('limpar').onclick=async()=>{
+  if(!confirm('Apagar os dados em cache desta coleção? Será preciso buscar no Firebase de novo.')) return;
+  await cacheApagar($('colecao').value);
+  await mostrarCache();
+};
+$('calBtn').onclick=e=>{
+  e.stopPropagation();
+  const abrindo=$('cal').classList.contains('hide');
+  if(abrindo){
+    const sel=$('dataBuscar').value;
+    calMes=sel?new Date(sel+'T00:00:00'):new Date(); calMes.setDate(1);
+    renderCal();
+  }
+  $('cal').classList.toggle('hide');
+};
+$('cal').onclick=e=>{
+  e.stopPropagation();
+  const b=e.target.closest('button'); if(!b) return;
+  if(b.dataset.nav){ calMes=new Date(calMes.getFullYear(),calMes.getMonth()+(+b.dataset.nav),1); renderCal(); return; }
+  if(b.dataset.d){
+    $('dataBuscar').value=b.dataset.d;
+    const br=b.dataset.d.split('-').reverse().join('/');
+    $('msg').classList.remove('err');
+    $('msg').textContent=diasBuscados.has(b.dataset.d)
+      ? `O dia ${br} já foi buscado. Para ver os dados, use o filtro "Data de referência".`
+      : `Dia ${br} selecionado (ainda não buscado). Clique em "Buscar no Firebase".`;
+    renderCal(); $('cal').classList.add('hide');
+  }
+};
+document.addEventListener('click',()=>$('cal').classList.add('hide'));
+['fData','fServ','fCid','fRec'].forEach(i=>$(i).onchange=aplicar);
+$('busca').oninput=aplicar;
+$('xlsx').onclick=exportarXLSX;
+$('prev').onclick=()=>{pagina--;render();};
+$('next').onclick=()=>{pagina++;render();};
+$('thead').onclick=e=>{
+  const c=e.target.dataset?.c; if(!c) return;
+  ordem={col:c,asc:ordem.col===c?!ordem.asc:true}; aplicar();
+};
+try{$('email').value=localStorage.getItem('igua_email')||'';}catch(e){}
+</script>
+</body>
+</html>
