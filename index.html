@@ -3,7 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-WV5Ycgyl7rOfHeGlXBk/n5KGMwcHeypktLXcXqmktPE=' https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js; style-src 'unsafe-inline'; img-src data:; connect-src https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com; base-uri 'none'; form-action 'none'">
+<meta name="robots" content="noindex, nofollow">
 <title>Iguá – Painel Firebase</title>
+<!-- ============ CONFIGURAÇÃO: edite só os dois valores abaixo ============ -->
+<script type="application/json" id="cfg">
+{"apiKey":"AIzaSyBas8b0hHPoB8TiqE1nY0hgJYGGd4o0Hh8","project":"executados-4c21f"}
+</script>
+<!-- ======================================================================= -->
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <style>
 :root{--bg:#f4f6f9;--card:#fff;--tx:#1b2430;--mut:#6b7686;--bd:#dfe4ec;--ac:#0a7cff;--ok:#12a150;--hd:#eef2f8}
@@ -55,7 +62,7 @@ tr:hover td{background:var(--hd)}
 </head>
 <body>
 <header>
-  <h1> Painel </h1>
+  <h1>Painel</h1>
   <span id="user" style="color:var(--mut)"></span>
   <button class="sec hide" id="sair">Sair</button>
 </header>
@@ -123,9 +130,10 @@ tr:hover td{background:var(--hd)}
 </main>
 
 <script>
-const API_KEY = "AIzaSyBas8b0hHPoB8TiqE1nY0hgJYGGd4o0Hh8";
-const PROJECT = "executados-4c21f";
+let API_KEY = "", PROJECT = "";
+try{ localStorage.removeItem('igua_api_key'); localStorage.removeItem('igua_project'); }catch(e){}
 const $ = id => document.getElementById(id);
+try{ const cfg=JSON.parse($('cfg').textContent); API_KEY=String(cfg.apiKey||'').trim(); PROJECT=String(cfg.project||'').trim(); }catch(e){}
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
 const POR_PAG = 100;
 const CAMPO_DESC = 'Descrição do Serviço';
@@ -175,6 +183,28 @@ async function cacheApagar(col){
   }catch(e){}
 }
 
+// ---------- Tradução de erros ----------
+function traduzirErro(m){
+  const s=String(m||'');
+  const t=[
+    [/INVALID_LOGIN_CREDENTIALS|EMAIL_NOT_FOUND|INVALID_PASSWORD/,'E-mail ou senha incorretos.'],
+    [/INVALID_EMAIL/,'E-mail inválido.'],
+    [/MISSING_PASSWORD|MISSING_EMAIL/,'Informe e-mail e senha.'],
+    [/USER_DISABLED/,'Usuário desativado. Fale com o administrador.'],
+    [/TOO_MANY_ATTEMPTS/,'Muitas tentativas. Aguarde alguns minutos e tente de novo.'],
+    [/OPERATION_NOT_ALLOWED/,'Login por e-mail/senha não está habilitado no projeto.'],
+    [/referer|are blocked/i,'Chave de API bloqueada para este endereço (restrição de referrer). Confira no Google Cloud.'],
+    [/API key not valid|API_KEY_INVALID|INVALID_API_KEY/i,'Chave de API inválida.'],
+    [/Missing or insufficient permissions|PERMISSION_DENIED/i,'Sem permissão para ler os dados. Confira as regras do Firestore e se seu usuário está autorizado.'],
+    [/UNAUTHENTICATED|TOKEN_EXPIRED|INVALID_ID_TOKEN|INVALID_REFRESH_TOKEN/i,'Sessão expirada. Entre novamente.'],
+    [/Quota exceeded|RESOURCE_EXHAUSTED/i,'Cota de leituras do Firebase esgotada. Tente mais tarde.'],
+    [/not found or deleted|PROJECT_NOT_FOUND/i,'Projeto não encontrado. Confira o ID do projeto.'],
+    [/Failed to fetch|NetworkError|Load failed/i,'Falha de conexão. Verifique a internet.']
+  ];
+  for(const [r,txt] of t) if(r.test(s)) return txt;
+  return s||'Erro desconhecido.';
+}
+
 // ---------- Autenticação ----------
 async function login(email, senha){
   const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${API_KEY}`,{
@@ -197,11 +227,22 @@ async function getToken(){
 
 // ---------- Firestore ----------
 function valor(v){
+  if(!v||typeof v!=='object') return '';
   if('stringValue' in v) return v.stringValue;
   if('integerValue' in v) return Number(v.integerValue);
   if('doubleValue' in v) return v.doubleValue;
   if('booleanValue' in v) return v.booleanValue;
   if('timestampValue' in v) return v.timestampValue;
+  if('nullValue' in v) return '';
+  if('referenceValue' in v) return String(v.referenceValue).split('/documents/').pop();
+  if('geoPointValue' in v) return `${v.geoPointValue.latitude}, ${v.geoPointValue.longitude}`;
+  if('bytesValue' in v) return v.bytesValue;
+  if('arrayValue' in v) return (v.arrayValue.values||[]).map(valor).join(', ');
+  if('mapValue' in v){
+    const o={}, f=v.mapValue.fields||{};
+    for(const k in f) o[k]=valor(f[k]);
+    return JSON.stringify(o);
+  }
   return '';
 }
 // Descrição em branco = registro descartado (não serve).
@@ -360,12 +401,15 @@ async function mostrarCache(){
 $('entrar').onclick=async()=>{
   $('lmsg').textContent=''; $('entrar').disabled=true;
   try{
+    if(!API_KEY||!PROJECT||/^COLE_/.test(API_KEY)||/^COLE_/.test(PROJECT)) throw new Error('Configuração ausente: preencha apiKey e project no bloco "cfg" do HTML.');
     await login($('email').value.trim(),$('senha').value);
-    try{localStorage.setItem('igua_email',$('email').value.trim());}catch(e){}
+    try{
+      localStorage.setItem('igua_email',$('email').value.trim());
+    }catch(e){}
     $('login').classList.add('hide'); $('app').classList.remove('hide');
     $('sair').classList.remove('hide'); $('user').textContent=$('email').value.trim();
     await mostrarCache();
-  }catch(e){$('lmsg').textContent=e.message;}
+  }catch(e){console.error(e);$('lmsg').textContent=traduzirErro(e.message);}
   $('entrar').disabled=false;
 };
 $('senha').onkeydown=e=>{if(e.key==='Enter')$('entrar').click();};
@@ -380,19 +424,24 @@ $('carregar').onclick=async()=>{
     const col=$('colecao').value, dia=dia0;
     $('msg').textContent='Buscando…';
     const novos = dia ? await carregarPorData(col,dia) : await carregarColecao(col);
-    // Junta com o que já estava no cache (mesmo _id é substituído).
+    // Substitui o que foi buscado: busca completa troca o cache inteiro;
+    // busca por data troca só os registros daquele dia (apagados no Firebase saem).
     const c=await cacheLer(col);
-    const mapa=new Map(((c&&c.registros)||[]).map(o=>[o._id,o]));
+    const base=dia ? ((c&&c.registros)||[]).filter(o=>o._dataReferenciaImportacao!==dia) : [];
+    const mapa=new Map(base.map(o=>[o._id,o]));
     novos.forEach(o=>mapa.set(o._id,o));
     const todos=[...mapa.values()].filter(temDescricao);
     if(dia) diasBuscados.add(dia);
-    else todos.forEach(o=>{ if(o._dataReferenciaImportacao) diasBuscados.add(o._dataReferenciaImportacao); });
+    else{
+      diasBuscados=new Set();
+      todos.forEach(o=>{ if(o._dataReferenciaImportacao) diasBuscados.add(o._dataReferenciaImportacao); });
+    }
     await cacheGravar(col,todos,diasBuscados);
     dados=todos;
     renderCal();
     montarFiltros(); aplicar();
     $('msg').textContent=`${novos.length} registros buscados${dia?` da data ${dia}`:''} às ${new Date().toLocaleTimeString('pt-BR')}. Total no cache: ${dados.length}.`;
-  }catch(e){$('msg').textContent=e.message;$('msg').classList.add('err');}
+  }catch(e){console.error(e);$('msg').textContent=traduzirErro(e.message);$('msg').classList.add('err');}
   $('carregar').disabled=false;
 };
 $('limpar').onclick=async()=>{
