@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-WV5Ycgyl7rOfHeGlXBk/n5KGMwcHeypktLXcXqmktPE=' https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js; style-src 'unsafe-inline'; img-src data:; connect-src https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-yw+1fdWSk9zaArG+tpejqvVY4ILDogFx9+4Gp+10OSQ=' https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js; style-src 'unsafe-inline'; img-src data:; connect-src https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex, nofollow">
 <title>Iguá – Painel Firebase</title>
 <!-- ============ CONFIGURAÇÃO: edite só os dois valores abaixo ============ -->
@@ -58,6 +58,7 @@ tr:hover td{background:var(--hd)}
 .calg .dia.sel{outline:2px solid var(--ac);outline-offset:1px}
 .leg{margin-top:8px;font-size:12px;color:var(--mut);display:flex;align-items:center;gap:6px}
 .leg i{display:inline-block;width:12px;height:12px;border-radius:3px;background:var(--ok)}
+#sinc{color:var(--mut);font-size:12px;margin:2px 0}
 </style>
 </head>
 <body>
@@ -85,7 +86,7 @@ tr:hover td{background:var(--hd)}
             <option value="camel_fiscalizacao_sul">Fiscalização Sul</option>
           </select>
         </label>
-        <label>Data a buscar no Firebase (vazio = tudo)
+        <label>Data a buscar no Firebase
           <input id="dataBuscar" type="date">
         </label>
         <div class="calwrap">
@@ -94,9 +95,11 @@ tr:hover td{background:var(--hd)}
         </div>
         <button id="carregar">Buscar no Firebase</button>
         <button class="sec" id="limpar">Limpar cache</button>
+        <button class="sec" id="sincBtn" title="Baixar os dias buscados por outros usuários">↻ Sincronizar</button>
         <button class="sec" id="xlsx">Exportar XLSX (filtrado)</button>
       </div>
       <div id="msg"></div>
+      <div id="sinc"></div>
     </div>
 
     <div class="card kpis" id="kpis"></div>
@@ -104,6 +107,7 @@ tr:hover td{background:var(--hd)}
     <div class="card">
       <div class="row">
         <label>Busca<input id="busca" placeholder="qualquer texto…"></label>
+        <label>Mês<select id="fMes"></select></label>
         <label>Data de referência<select id="fData"></select></label>
         <label>Serviço<select id="fServ"></select></label>
         <label>Cidade<select id="fCid"></select></label>
@@ -141,6 +145,10 @@ let token = null, refresh = null, expira = 0;
 let dados = [], colunas = [], filtrado = [], pagina = 0, ordem = {col:null, asc:true};
 let diasBuscados = new Set();          // dias (AAAA-MM-DD) já buscados na coleção atual
 let calMes = new Date(); calMes.setDate(1);
+let syncLocal = {};                    // dia -> {em, por}: versão compartilhada já aplicada neste navegador
+let indiceRemoto = {};                 // dia -> {em, por}: dias já compartilhados no Firebase (índice)
+let trab = false, ultSync = 0;         // trab = operação em andamento
+const SYNC_COL = 'painel_sync';        // coleção do Firestore usada para compartilhar entre usuários
 
 // ---------- Cache local (IndexedDB) ----------
 // Guarda os registros já baixados de cada coleção no navegador, para
@@ -162,12 +170,12 @@ async function cacheLer(col){
     });
   }catch(e){return null;}
 }
-async function cacheGravar(col,registros,dias){
+async function cacheGravar(col,registros,dias,sync){
   try{
     const db=await abrirDB();
     await new Promise((res,rej)=>{
       const tx=db.transaction('colecoes','readwrite');
-      tx.objectStore('colecoes').put({registros,diasBuscados:[...dias],atualizadoEm:Date.now()},col);
+      tx.objectStore('colecoes').put({registros,diasBuscados:[...dias],sync:sync||{},atualizadoEm:Date.now()},col);
       tx.oncomplete=res; tx.onerror=()=>rej(tx.error);
     });
   }catch(e){console.warn('Não foi possível gravar o cache:',e);}
@@ -254,21 +262,6 @@ function docParaObjeto(d){
   for(const k in d.fields) o[k]=valor(d.fields[k]);
   return o;
 }
-// Lê a coleção inteira (lista paginada).
-async function carregarColecao(col){
-  const out=[]; let pageToken='';
-  do{
-    const t = await getToken();
-    const url = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/${col}?pageSize=300`+(pageToken?`&pageToken=${encodeURIComponent(pageToken)}`:'');
-    const r = await fetch(url,{headers:{Authorization:'Bearer '+t}});
-    const j = await r.json();
-    if(!r.ok) throw new Error(j.error?.message || 'Erro ao ler o Firestore');
-    (j.documents||[]).forEach(d=>{ const o=docParaObjeto(d); if(temDescricao(o)) out.push(o); });
-    pageToken=j.nextPageToken||'';
-    $('msg').textContent=`Buscando… ${out.length} registros`;
-  }while(pageToken);
-  return out;
-}
 // Lê só os documentos de uma data de referência (gasta bem menos leituras).
 async function carregarPorData(col,dataISO){
   const t = await getToken();
@@ -286,6 +279,108 @@ async function carregarPorData(col,dataISO){
   return out;
 }
 
+// ---------- Compartilhamento entre usuários ----------
+// Quando alguém busca um dia, o resultado é gravado em "painel_sync" (poucos
+// documentos). Os outros usuários baixam esse resultado em vez de consultar
+// a coleção original, e o dia fica verde no calendário de todos.
+const baseDocs = () => `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
+async function gravarDoc(id,fields,mask){
+  const t = await getToken();
+  const url = `${baseDocs()}/${SYNC_COL}/${encodeURIComponent(id)}`+(mask?`?updateMask.fieldPaths=${encodeURIComponent(mask)}`:'');
+  const r = await fetch(url,{method:'PATCH',headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({fields})});
+  const j = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.error?.message || 'Erro ao gravar no Firestore');
+}
+// Divide os registros em blocos pequenos (limite de 1 MB por documento).
+function dividirBlocos(regs){
+  const TAM=250000, blocos=[]; let atual=[], n=0;
+  for(const r of regs){
+    const t=JSON.stringify(r).length;
+    if(atual.length && n+t>TAM){ blocos.push(atual); atual=[]; n=0; }
+    atual.push(r); n+=t;
+  }
+  if(atual.length) blocos.push(atual);
+  return blocos;
+}
+async function publicarDia(col,dia,regs,em,por){
+  const blocos=dividirBlocos(regs);
+  for(let i=0;i<blocos.length;i++)
+    await gravarDoc(`dia-${col}-${dia}-${i}`,{json:{stringValue:JSON.stringify(blocos[i])}});
+  // O índice é gravado por último: ninguém vê o dia antes dos dados estarem prontos.
+  await gravarDoc(`idx-${col}`,
+    {dias:{mapValue:{fields:{[dia]:{mapValue:{fields:{
+      chunks:{integerValue:String(blocos.length)},total:{integerValue:String(regs.length)},
+      por:{stringValue:por},em:{stringValue:em}}}}}}}},
+    'dias.`'+dia+'`');
+}
+async function lerIndice(col){
+  const t = await getToken();
+  const r = await fetch(`${baseDocs()}/${SYNC_COL}/${encodeURIComponent('idx-'+col)}`,{headers:{Authorization:'Bearer '+t}});
+  if(r.status===404) return {};
+  const j = await r.json();
+  if(!r.ok) throw new Error(j.error?.message || 'Erro ao ler o índice compartilhado');
+  const f=j.fields?.dias?.mapValue?.fields||{}, out={};
+  for(const dia in f){
+    const m=f[dia].mapValue?.fields||{};
+    out[dia]={em:m.em?.stringValue||'',por:m.por?.stringValue||'',chunks:Number(m.chunks?.integerValue||0),total:Number(m.total?.integerValue||0)};
+  }
+  return out;
+}
+async function baixarDia(col,dia,info){
+  if(!info.chunks) return [];
+  const prefixo=`projects/${PROJECT}/databases/(default)/documents/${SYNC_COL}/`;
+  const docs=[]; for(let i=0;i<info.chunks;i++) docs.push(`${prefixo}dia-${col}-${dia}-${i}`);
+  const t = await getToken();
+  const r = await fetch(`${baseDocs()}:batchGet`,{method:'POST',
+    headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({documents:docs})});
+  const j = await r.json();
+  if(!r.ok) throw new Error((Array.isArray(j)?j[0]?.error?.message:j.error?.message) || 'Erro ao ler dados compartilhados');
+  const partes=[];
+  (j||[]).forEach(x=>{ if(x.found){ partes[+x.found.name.split('-').pop()]=JSON.parse(x.found.fields.json.stringValue); } });
+  for(let i=0;i<info.chunks;i++) if(!partes[i]) throw new Error(`Dados compartilhados do dia ${dia} incompletos. Tente sincronizar de novo.`);
+  return partes.flat();
+}
+async function sincronizar(manual,mes){
+  if(!token) return;
+  if(trab && !mes){ if(manual) $('sinc').textContent='Aguarde: há outra operação em andamento.'; return; }
+  while(trab) await new Promise(r=>setTimeout(r,200));
+  const col=$('colecao').value;
+  trab=true; $('colecao').disabled=true; $('fMes').disabled=true; ultSync=Date.now();
+  const hora=new Date().toLocaleTimeString('pt-BR');
+  try{
+    const idx=await lerIndice(col);           // 1 leitura: só o índice dos dias compartilhados
+    indiceRemoto=idx;
+    const desatual=d=>!syncLocal[d] || String(syncLocal[d].em)<String(idx[d].em);
+    // Baixa os dias do mês escolhido + atualiza dias que já estão aqui mas foram rebuscados por outro usuário.
+    const pend=Object.keys(idx).filter(d=>desatual(d) && ((mes&&d.startsWith(mes)) || diasBuscados.has(d))).sort();
+    for(const dia of pend){
+      $('sinc').textContent=`Baixando ${dia.split('-').reverse().join('/')} (${pend.indexOf(dia)+1}/${pend.length})…`;
+      const regs=await baixarDia(col,dia,idx[dia]);
+      dados=dados.filter(o=>o._dataReferenciaImportacao!==dia).concat(regs.filter(temDescricao));
+      diasBuscados.add(dia); syncLocal[dia]={em:idx[dia].em,por:idx[dia].por};
+    }
+    if(pend.length) await cacheGravar(col,dados,diasBuscados,syncLocal);
+    renderCal();
+    if(pend.length){ montarFiltros(); aplicar(); } else opcoesMes();
+    if(mes){
+      const rot=`${mes.slice(5)}/${mes.slice(0,4)}`;
+      const temAlgo=Object.keys(idx).some(d=>d.startsWith(mes)) || dados.some(o=>String(o._dataReferenciaImportacao||'').startsWith(mes));
+      $('sinc').textContent = pend.length ? `Mês ${rot}: ${pend.length} dia(s) baixado(s) do que outros usuários compartilharam (${hora}).`
+        : temAlgo ? `Mês ${rot}: tudo já estava atualizado (${hora}).`
+        : `Mês ${rot}: nenhum dia foi compartilhado ainda. Busque os dias que faltam pela data.`;
+    }else{
+      $('sinc').textContent = `Sincronizado às ${hora}.`+(pend.length?` ${pend.length} dia(s) atualizado(s).`:'');
+    }
+  }catch(e){ console.error(e); $('sinc').textContent='Sincronização: '+traduzirErro(e.message); }
+  finally{ trab=false; $('colecao').disabled=false; $('fMes').disabled=false; }
+}
+function tituloDia(s){
+  const i=syncLocal[s]||indiceRemoto[s];
+  if(!diasBuscados.has(s) && !indiceRemoto[s]) return 'Ainda não buscado';
+  const quem=i&&i.por?`Buscado por ${i.por} em ${new Date(i.em).toLocaleString('pt-BR')}`:'Já buscado';
+  return diasBuscados.has(s) ? quem : quem+' (escolha o mês para carregar)';
+}
+
 // ---------- UI ----------
 function fmt(v){
   if(typeof v==='string' && /^\d{4}-\d{2}-\d{2}T/.test(v)){
@@ -293,14 +388,26 @@ function fmt(v){
   }
   return v ?? '';
 }
-function opcoes(sel,campo){
+function opcoes(sel,campo,filtro){
   const atual=$(sel).value;
-  const vals=[...new Set(dados.map(d=>d[campo]).filter(x=>x!==undefined&&x!==''))].sort();
+  const vals=[...new Set(dados.filter(filtro||(()=>true)).map(d=>d[campo]).filter(x=>x!==undefined&&x!==''))].sort();
   $(sel).innerHTML='<option value="">Todos</option>'+vals.map(v=>`<option>${esc(v)}</option>`).join('');
   if(vals.map(String).includes(atual)) $(sel).value=atual;
 }
+const NOMES_MES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+function opcoesMes(){
+  const atual=$('fMes').value;
+  const ms=[...new Set([...dados.map(d=>String(d._dataReferenciaImportacao||'').slice(0,7)),...Object.keys(indiceRemoto).map(d=>d.slice(0,7))].filter(x=>/^\d{4}-\d{2}$/.test(x)))].sort().reverse();
+  $('fMes').innerHTML='<option value="">Todos</option>'+ms.map(m=>`<option value="${m}">${NOMES_MES[+m.slice(5)-1]}/${m.slice(0,4)}</option>`).join('');
+  if(ms.includes(atual)) $('fMes').value=atual;
+}
+// A lista de datas mostra só os dias do mês escolhido.
+function opcoesData(){
+  const mes=$('fMes').value;
+  opcoes('fData','_dataReferenciaImportacao',d=>!mes||String(d._dataReferenciaImportacao||'').startsWith(mes));
+}
 function montarFiltros(){
-  opcoes('fData','_dataReferenciaImportacao'); opcoes('fServ',CAMPO_DESC);
+  opcoesMes(); opcoesData(); opcoes('fServ',CAMPO_DESC);
   opcoes('fCid','Cidade'); opcoes('fRec','Recurso');
   const pref=['Data','Recurso','Ordem de Serviço',CAMPO_DESC,'Cidade','Hidrômetro','Status da Atividade','Fim do SLA'];
   const todas=new Set(); dados.forEach(d=>Object.keys(d).forEach(k=>todas.add(k)));
@@ -309,8 +416,10 @@ function montarFiltros(){
 }
 function aplicar(){
   const q=$('busca').value.trim().toLowerCase();
+  const mes=$('fMes').value;
   const f={_dataReferenciaImportacao:$('fData').value,[CAMPO_DESC]:$('fServ').value,Cidade:$('fCid').value,Recurso:$('fRec').value};
   filtrado=dados.filter(d=>{
+    if(mes && !String(d._dataReferenciaImportacao||'').startsWith(mes)) return false;
     for(const k in f) if(f[k] && String(d[k])!==f[k]) return false;
     if(q && !colunas.some(c=>String(d[c]??'').toLowerCase().includes(q))) return false;
     return true;
@@ -348,10 +457,10 @@ function renderCal(){
   for(let i=0;i<primeiro;i++) h+='<span></span>';
   for(let d=1;d<=total;d++){
     const s=`${y}-${pad(m+1)}-${pad(d)}`;
-    const cls=['dia',diasBuscados.has(s)?'ok':'',s===hoje?'hoje':'',s===sel?'sel':''].join(' ');
-    h+=`<button type="button" class="${cls}" data-d="${s}" title="${diasBuscados.has(s)?'Já buscado':'Ainda não buscado'}">${d}</button>`;
+    const cls=['dia',(diasBuscados.has(s)||indiceRemoto[s])?'ok':'',s===hoje?'hoje':'',s===sel?'sel':''].join(' ');
+    h+=`<button type="button" class="${cls}" data-d="${s}" title="${esc(tituloDia(s))}">${d}</button>`;
   }
-  h+='</div><div class="leg"><i></i> dia já buscado (clique num dia para escolher a data)</div>';
+  h+='</div><div class="leg"><i></i> dia já buscado por você ou por outro usuário (clique para escolher a data)</div>';
   $('cal').innerHTML=h;
 }
 function render(){
@@ -388,12 +497,14 @@ async function mostrarCache(){
   const c=await cacheLer(col);
   dados=((c&&c.registros)||[]).filter(temDescricao);
   // Dias buscados = os registrados no cache + os que aparecem nos dados.
+  indiceRemoto={};
+  syncLocal=(c&&c.sync)||{};
   diasBuscados=new Set([...((c&&c.diasBuscados)||[]),...dados.map(o=>o._dataReferenciaImportacao).filter(Boolean)]);
   renderCal();
   montarFiltros(); aplicar();
   $('msg').classList.remove('err');
   $('msg').textContent=c
-    ? `${dados.length} registros do cache (atualizado em ${new Date(c.atualizadoEm).toLocaleString('pt-BR')}). Nenhuma leitura no Firebase.`
+    ? `${dados.length} registros do cache (atualizado em ${new Date(c.atualizadoEm).toLocaleString('pt-BR')}).`
     : 'Cache vazio. Use "Buscar no Firebase" para carregar dados.';
 }
 
@@ -409,45 +520,55 @@ $('entrar').onclick=async()=>{
     $('login').classList.add('hide'); $('app').classList.remove('hide');
     $('sair').classList.remove('hide'); $('user').textContent=$('email').value.trim();
     await mostrarCache();
+    sincronizar();
   }catch(e){console.error(e);$('lmsg').textContent=traduzirErro(e.message);}
   $('entrar').disabled=false;
 };
 $('senha').onkeydown=e=>{if(e.key==='Enter')$('entrar').click();};
 $('sair').onclick=()=>location.reload();
-$('colecao').onchange=mostrarCache;
+$('colecao').onchange=async()=>{ await mostrarCache(); sincronizar(); };
 $('carregar').onclick=async()=>{
   const dia0=$('dataBuscar').value;
-  if(dia0 && diasBuscados.has(dia0) &&
-     !confirm(`O dia ${dia0.split('-').reverse().join('/')} já foi buscado. Buscar de novo (gasta leituras do Firebase)?`)) return;
+  if(!dia0){ $('msg').textContent='Escolha uma data para buscar.'; $('msg').classList.add('err'); return; }
+  if(diasBuscados.has(dia0)||indiceRemoto[dia0]){
+    const i=syncLocal[dia0]||indiceRemoto[dia0], quem=i&&i.por?` por ${i.por}`:'';
+    if(!confirm(`O dia ${dia0.split('-').reverse().join('/')} já foi buscado${quem}. Buscar de novo (gasta leituras do Firebase)?`)) return;
+  }
   $('carregar').disabled=true; $('msg').classList.remove('err');
+  while(trab) await new Promise(r=>setTimeout(r,200));
+  trab=true; $('colecao').disabled=true;
   try{
     const col=$('colecao').value, dia=dia0;
     $('msg').textContent='Buscando…';
-    const novos = dia ? await carregarPorData(col,dia) : await carregarColecao(col);
-    // Substitui o que foi buscado: busca completa troca o cache inteiro;
-    // busca por data troca só os registros daquele dia (apagados no Firebase saem).
+    const novos = await carregarPorData(col,dia);
+    // Troca só os registros daquele dia (apagados no Firebase saem).
     const c=await cacheLer(col);
-    const base=dia ? ((c&&c.registros)||[]).filter(o=>o._dataReferenciaImportacao!==dia) : [];
+    const base=((c&&c.registros)||[]).filter(o=>o._dataReferenciaImportacao!==dia);
     const mapa=new Map(base.map(o=>[o._id,o]));
     novos.forEach(o=>mapa.set(o._id,o));
     const todos=[...mapa.values()].filter(temDescricao);
-    if(dia) diasBuscados.add(dia);
-    else{
-      diasBuscados=new Set();
-      todos.forEach(o=>{ if(o._dataReferenciaImportacao) diasBuscados.add(o._dataReferenciaImportacao); });
-    }
-    await cacheGravar(col,todos,diasBuscados);
+    diasBuscados.add(dia);
+    // Compartilha o dia buscado com os outros usuários (eles não precisam buscar de novo).
+    let aviso='';
+    const em=new Date().toISOString(), por=$('user').textContent;
+    try{
+      await publicarDia(col,dia,novos,em,por);
+      syncLocal[dia]={em,por}; indiceRemoto[dia]={em,por,chunks:0,total:novos.length};
+      aviso=' Dia compartilhado com os outros usuários.';
+    }catch(e){ console.error(e); aviso=' Atenção: não foi possível compartilhar com os outros usuários ('+traduzirErro(e.message)+').'; }
+    await cacheGravar(col,todos,diasBuscados,syncLocal);
     dados=todos;
     renderCal();
     montarFiltros(); aplicar();
-    $('msg').textContent=`${novos.length} registros buscados${dia?` da data ${dia}`:''} às ${new Date().toLocaleTimeString('pt-BR')}. Total no cache: ${dados.length}.`;
+    $('msg').textContent=`${novos.length} registros buscados da data ${dia} às ${new Date().toLocaleTimeString('pt-BR')}. Total no cache: ${dados.length}.${aviso}`;
   }catch(e){console.error(e);$('msg').textContent=traduzirErro(e.message);$('msg').classList.add('err');}
-  $('carregar').disabled=false;
+  finally{ trab=false; $('colecao').disabled=false; $('carregar').disabled=false; }
 };
 $('limpar').onclick=async()=>{
-  if(!confirm('Apagar os dados em cache desta coleção? Será preciso buscar no Firebase de novo.')) return;
+  if(!confirm('Apagar os dados em cache desta coleção? Os dias compartilhados por outros usuários serão baixados de novo.')) return;
   await cacheApagar($('colecao').value);
   await mostrarCache();
+  sincronizar();
 };
 $('calBtn').onclick=e=>{
   e.stopPropagation();
@@ -458,6 +579,7 @@ $('calBtn').onclick=e=>{
     renderCal();
   }
   $('cal').classList.toggle('hide');
+  if(abrindo && Date.now()-ultSync>15000) sincronizar();
 };
 $('cal').onclick=e=>{
   e.stopPropagation();
@@ -467,14 +589,19 @@ $('cal').onclick=e=>{
     $('dataBuscar').value=b.dataset.d;
     const br=b.dataset.d.split('-').reverse().join('/');
     $('msg').classList.remove('err');
-    $('msg').textContent=diasBuscados.has(b.dataset.d)
-      ? `O dia ${br} já foi buscado. Para ver os dados, use o filtro "Data de referência".`
+    $('msg').textContent=(diasBuscados.has(b.dataset.d)||indiceRemoto[b.dataset.d])
+      ? `O dia ${br} já foi buscado. Para ver os dados, escolha o mês no filtro "Mês".`
       : `Dia ${br} selecionado (ainda não buscado). Clique em "Buscar no Firebase".`;
     renderCal(); $('cal').classList.add('hide');
   }
 };
 document.addEventListener('click',()=>$('cal').classList.add('hide'));
 ['fData','fServ','fCid','fRec'].forEach(i=>$(i).onchange=aplicar);
+// Escolher um mês baixa de uma vez todos os dias desse mês que outros usuários já compartilharam.
+$('fMes').onchange=async()=>{ const mes=$('fMes').value; if(mes) await sincronizar(true,mes); opcoesData(); aplicar(); };
+$('sincBtn').onclick=()=>sincronizar(true);
+// Verifica a cada 3 min se outro usuário buscou um dia novo (1 leitura por verificação).
+setInterval(()=>{ if(!document.hidden && token) sincronizar(); },180000);
 $('busca').oninput=aplicar;
 $('xlsx').onclick=exportarXLSX;
 $('prev').onclick=()=>{pagina--;render();};
