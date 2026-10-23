@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-yw+1fdWSk9zaArG+tpejqvVY4ILDogFx9+4Gp+10OSQ=' https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js; style-src 'unsafe-inline'; img-src data:; connect-src https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-jRDQueT8uJXF1xIxAWt40ScxDxQBo/ExSgPixdF0gB8=' https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js; style-src 'unsafe-inline'; img-src data:; connect-src https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex, nofollow">
 <title>Iguá – Painel Firebase</title>
-<!-- ============ CONFIGURAÇÃO: edite só os dois valores abaixo ============ -->
+<!-- ============ CONFIGURAÇÃO: edite só os valores abaixo (admins = e-mails que veem armazenamento e apagar mês) ============ -->
 <script type="application/json" id="cfg">
-{"apiKey":"AIzaSyBas8b0hHPoB8TiqE1nY0hgJYGGd4o0Hh8","project":"executados-4c21f"}
+{"apiKey":"AIzaSyBas8b0hHPoB8TiqE1nY0hgJYGGd4o0Hh8","project":"executados-4c21f","admins":["ricardo.fontes.v347@gmail.com"]}
 </script>
 <!-- ======================================================================= -->
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
@@ -59,6 +59,13 @@ tr:hover td{background:var(--hd)}
 .leg{margin-top:8px;font-size:12px;color:var(--mut);display:flex;align-items:center;gap:6px}
 .leg i{display:inline-block;width:12px;height:12px;border-radius:3px;background:var(--ok)}
 #sinc{color:var(--mut);font-size:12px;margin:2px 0}
+.barra{height:14px;background:var(--hd);border:1px solid var(--bd);border-radius:8px;overflow:hidden;margin:8px 0}
+.barra i{display:block;height:100%;width:0;background:var(--ok);transition:width .3s}
+.barra i.mid{background:#e0a100}
+.barra i.alto{background:#d33}
+button.danger{background:#d33}
+#usoTxt{color:var(--mut);font-size:12px}
+.chk{flex-direction:row!important;align-items:center;gap:6px!important}
 </style>
 </head>
 <body>
@@ -102,6 +109,21 @@ tr:hover td{background:var(--hd)}
       <div id="sinc"></div>
     </div>
 
+    <div class="card hide" id="uso">
+      <div class="row" style="align-items:center">
+        <b style="flex:1">Armazenamento do Firebase (estimado)</b>
+        <button class="sec" id="usoBtn" type="button" title="Recalcular">↻</button>
+        <button class="sec" id="usoCfg" type="button" title="Ajustar limite e calibrar">⚙</button>
+      </div>
+      <div class="barra"><i id="usoFill"></i></div>
+      <div id="usoTxt">Entre para ver o uso.</div>
+      <div class="row" style="margin-top:12px">
+        <label>Apagar um mês inteiro (da coleção selecionada acima)<input id="mesApagar" type="month"></label>
+        <label class="chk"><input id="apagarOrig" type="checkbox"> Apagar também os dados originais no Firebase (não dá para desfazer)</label>
+        <button class="danger" id="apagarBtn" type="button">Apagar mês</button>
+      </div>
+    </div>
+
     <div class="card kpis" id="kpis"></div>
 
     <div class="card">
@@ -134,10 +156,10 @@ tr:hover td{background:var(--hd)}
 </main>
 
 <script>
-let API_KEY = "", PROJECT = "";
+let API_KEY = "", PROJECT = "", ADMINS = [];
 try{ localStorage.removeItem('igua_api_key'); localStorage.removeItem('igua_project'); }catch(e){}
 const $ = id => document.getElementById(id);
-try{ const cfg=JSON.parse($('cfg').textContent); API_KEY=String(cfg.apiKey||'').trim(); PROJECT=String(cfg.project||'').trim(); }catch(e){}
+try{ const cfg=JSON.parse($('cfg').textContent); API_KEY=String(cfg.apiKey||'').trim(); PROJECT=String(cfg.project||'').trim(); ADMINS=(cfg.admins||[]).map(e=>String(e).trim().toLowerCase()); }catch(e){}
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
 const POR_PAG = 100;
 const CAMPO_DESC = 'Descrição do Serviço';
@@ -205,7 +227,7 @@ function traduzirErro(m){
     [/API key not valid|API_KEY_INVALID|INVALID_API_KEY/i,'Chave de API inválida.'],
     [/Missing or insufficient permissions|PERMISSION_DENIED/i,'Sem permissão para ler os dados. Confira as regras do Firestore e se seu usuário está autorizado.'],
     [/UNAUTHENTICATED|TOKEN_EXPIRED|INVALID_ID_TOKEN|INVALID_REFRESH_TOKEN/i,'Sessão expirada. Entre novamente.'],
-    [/Quota exceeded|RESOURCE_EXHAUSTED/i,'Cota de leituras do Firebase esgotada. Tente mais tarde.'],
+    [/Quota exceeded|RESOURCE_EXHAUSTED/i,'Cota diária do Firebase esgotada (leituras, gravações ou exclusões). Tente mais tarde.'],
     [/not found or deleted|PROJECT_NOT_FOUND/i,'Projeto não encontrado. Confira o ID do projeto.'],
     [/Failed to fetch|NetworkError|Load failed/i,'Falha de conexão. Verifique a internet.']
   ];
@@ -214,6 +236,7 @@ function traduzirErro(m){
 }
 
 // ---------- Autenticação ----------
+let emailLogado='';
 async function login(email, senha){
   const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${API_KEY}`,{
     method:'POST',headers:{'Content-Type':'application/json'},
@@ -221,6 +244,7 @@ async function login(email, senha){
   const j = await r.json();
   if(!r.ok) throw new Error(j.error?.message || 'Falha no login');
   token=j.idToken; refresh=j.refreshToken; expira=Date.now()+(+j.expiresIn*1000)-60000;
+  emailLogado=String(j.email||email).trim().toLowerCase();
 }
 async function getToken(){
   if(Date.now()<expira) return token;
@@ -304,14 +328,18 @@ function dividirBlocos(regs){
 }
 async function publicarDia(col,dia,regs,em,por){
   const blocos=dividirBlocos(regs);
-  for(let i=0;i<blocos.length;i++)
-    await gravarDoc(`dia-${col}-${dia}-${i}`,{json:{stringValue:JSON.stringify(blocos[i])}});
+  let bytes=0;
+  for(let i=0;i<blocos.length;i++){
+    const js=JSON.stringify(blocos[i]); bytes+=js.length+100;
+    await gravarDoc(`dia-${col}-${dia}-${i}`,{json:{stringValue:js}});
+  }
   // O índice é gravado por último: ninguém vê o dia antes dos dados estarem prontos.
   await gravarDoc(`idx-${col}`,
     {dias:{mapValue:{fields:{[dia]:{mapValue:{fields:{
-      chunks:{integerValue:String(blocos.length)},total:{integerValue:String(regs.length)},
+      chunks:{integerValue:String(blocos.length)},total:{integerValue:String(regs.length)},bytes:{integerValue:String(bytes)},
       por:{stringValue:por},em:{stringValue:em}}}}}}}},
     'dias.`'+dia+'`');
+  return bytes;
 }
 async function lerIndice(col){
   const t = await getToken();
@@ -322,7 +350,7 @@ async function lerIndice(col){
   const f=j.fields?.dias?.mapValue?.fields||{}, out={};
   for(const dia in f){
     const m=f[dia].mapValue?.fields||{};
-    out[dia]={em:m.em?.stringValue||'',por:m.por?.stringValue||'',chunks:Number(m.chunks?.integerValue||0),total:Number(m.total?.integerValue||0)};
+    out[dia]={em:m.em?.stringValue||'',por:m.por?.stringValue||'',chunks:Number(m.chunks?.integerValue||0),total:Number(m.total?.integerValue||0),bytes:Number(m.bytes?.integerValue||0)};
   }
   return out;
 }
@@ -508,9 +536,171 @@ async function mostrarCache(){
     : 'Cache vazio. Use "Buscar no Firebase" para carregar dados.';
 }
 
+// ---------- Armazenamento do Firebase (estimativa) + apagar mês (só admin) ----------
+// Atenção: esconder o card é só visual. Quem bloqueia de verdade são as regras do Firestore.
+const ehAdmin=()=>!!emailLogado&&ADMINS.includes(emailLogado);
+// O Firestore não informa o espaço total usado a quem acessa pelo navegador.
+// Por isso o valor é ESTIMADO: nº de documentos x tamanho médio x fator (os
+// índices também ocupam espaço). Use o botão ⚙ para calibrar o fator com o
+// número real que aparece no console do Firebase (Firestore > Uso).
+const COLS_ORIG=['atividades_corte_religacao','camel_fiscalizacao_sul'];
+let limiteBytes=1073741824, fatorUso=2, ultBruto=0, usando=false;
+try{
+  const l=+localStorage.getItem('igua_limite_bytes'), f=+localStorage.getItem('igua_fator_uso');
+  if(l>0) limiteBytes=l; if(f>0) fatorUso=f;
+}catch(e){}
+const mediaDoc={};
+function fmtBytes(b){
+  if(b<1048576) return (b/1024).toFixed(0)+' KB';
+  if(b<1073741824) return (b/1048576).toFixed(1)+' MB';
+  return (b/1073741824).toFixed(2)+' GB';
+}
+async function postar(url,corpo){
+  const t=await getToken();
+  const r=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify(corpo)});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error((Array.isArray(j)?j[0]?.error?.message:j.error?.message) || 'Erro ao falar com o Firestore');
+  return j;
+}
+function filtroMes(mes,prox){
+  return {compositeFilter:{op:'AND',filters:[
+    {fieldFilter:{field:{fieldPath:'_dataReferenciaImportacao'},op:'GREATER_THAN_OR_EQUAL',value:{stringValue:mes+'-01'}}},
+    {fieldFilter:{field:{fieldPath:'_dataReferenciaImportacao'},op:'LESS_THAN',value:{stringValue:prox}}}]}};
+}
+function proxMes(mes){
+  const [y,m]=mes.split('-').map(Number);
+  return m===12?`${y+1}-01-01`:`${y}-${pad(m+1)}-01`;
+}
+async function contarDocs(col,where){
+  const sq={from:[{collectionId:col}]}; if(where) sq.where=where;
+  const j=await postar(`${baseDocs()}:runAggregationQuery`,{structuredAggregationQuery:{structuredQuery:sq,aggregations:[{alias:'n',count:{}}]}});
+  return Number(j[0]?.result?.aggregateFields?.n?.integerValue||0);
+}
+// Tamanho médio de um documento: usa o cache local; sem cache, lê uma amostra de 20.
+async function mediaDocumento(col){
+  if(mediaDoc[col]) return mediaDoc[col];
+  let amostra=[];
+  const c=await cacheLer(col);
+  if(c&&c.registros&&c.registros.length) amostra=c.registros.slice(0,300);
+  else{
+    const t=await getToken();
+    const r=await fetch(`${baseDocs()}/${col}?pageSize=20`,{headers:{Authorization:'Bearer '+t}});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(j.error?.message||'Erro ao ler amostra do Firestore');
+    amostra=(j.documents||[]).map(docParaObjeto);
+  }
+  if(!amostra.length) return 0;
+  const m=amostra.reduce((s,o)=>s+JSON.stringify(o).length+100,0)/amostra.length;
+  mediaDoc[col]=m; return m;
+}
+async function atualizarUso(){
+  if(!token||usando||!ehAdmin()) return;
+  usando=true; $('usoBtn').disabled=true; $('usoTxt').textContent='Calculando…';
+  try{
+    let orig=0, sync=0;
+    for(const col of COLS_ORIG){
+      const n=await contarDocs(col), m=await mediaDocumento(col);
+      orig+=n*m;
+      const idx=await lerIndice(col);
+      for(const d in idx) sync+=idx[d].bytes||(idx[d].total*m);
+    }
+    ultBruto=orig+sync;
+    const total=ultBruto*fatorUso, pct=total/limiteBytes*100;
+    $('usoFill').style.width=Math.min(100,pct).toFixed(1)+'%';
+    $('usoFill').className=pct>=90?'alto':pct>=70?'mid':'';
+    $('usoTxt').textContent=`≈ ${fmtBytes(total)} de ${fmtBytes(limiteBytes)} (${pct.toFixed(1)}%) · dados originais ≈ ${fmtBytes(orig*fatorUso)} · cópia compartilhada ≈ ${fmtBytes(sync*fatorUso)} · estimativa (confira no console do Firebase e calibre em ⚙)`;
+  }catch(e){
+    console.error(e); $('usoFill').style.width='0'; $('usoTxt').textContent='Não foi possível estimar o espaço: '+traduzirErro(e.message);
+  }
+  finally{ usando=false; $('usoBtn').disabled=false; }
+}
+function ajustarUso(){
+  const l=prompt('Limite de armazenamento em GB (plano gratuito = 1):',String(+(limiteBytes/1073741824).toFixed(2)));
+  if(l===null) return;
+  const gb=parseFloat(String(l).replace(',','.'));
+  if(gb>0) limiteBytes=gb*1073741824;
+  const r=prompt(`Calibrar (opcional): quantos MB de armazenamento o console do Firebase mostra agora? Deixe vazio para manter o fator atual (${fatorUso.toFixed(2)}).`,'');
+  const real=parseFloat(String(r||'').replace(',','.'));
+  if(real>0 && ultBruto>0) fatorUso=real*1048576/ultBruto;
+  try{ localStorage.setItem('igua_limite_bytes',String(limiteBytes)); localStorage.setItem('igua_fator_uso',String(fatorUso)); }catch(e){}
+  atualizarUso();
+}
+async function excluirDocs(nomes){
+  for(let i=0;i<nomes.length;i+=400)
+    await postar(`${baseDocs()}:commit`,{writes:nomes.slice(i,i+400).map(n=>({delete:n}))});
+}
+// Tira os dias do índice compartilhado (a máscara sem valor apaga o campo).
+async function removerDoIndice(col,dias){
+  if(!dias.length) return;
+  const t=await getToken();
+  const mask=dias.map(d=>'updateMask.fieldPaths='+encodeURIComponent('dias.`'+d+'`')).join('&');
+  const r=await fetch(`${baseDocs()}/${SYNC_COL}/${encodeURIComponent('idx-'+col)}?${mask}`,
+    {method:'PATCH',headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({fields:{}})});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.error?.message||'Erro ao atualizar o índice compartilhado');
+}
+async function apagarOriginais(col,mes,prox,progresso){
+  let total=0;
+  for(;;){
+    const j=await postar(`${baseDocs()}:runQuery`,{structuredQuery:{
+      from:[{collectionId:col}],select:{fields:[{fieldPath:'__name__'}]},where:filtroMes(mes,prox),limit:500}});
+    const nomes=(j||[]).filter(x=>x.document).map(x=>x.document.name);
+    if(!nomes.length) break;
+    await excluirDocs(nomes); total+=nomes.length; progresso(total);
+    if(nomes.length<500) break;
+  }
+  return total;
+}
+async function apagarMes(){
+  const mes=$('mesApagar').value;
+  if(!token||!ehAdmin()) return;
+  if(!/^\d{4}-\d{2}$/.test(mes)){ $('msg').classList.add('err'); $('msg').textContent='Escolha o mês que deseja apagar.'; return; }
+  const col=$('colecao').value, orig=$('apagarOrig').checked;
+  const rot=`${mes.slice(5)}/${mes.slice(0,4)}`, nome=$('colecao').selectedOptions[0].textContent, prox=proxMes(mes);
+  $('apagarBtn').disabled=true; $('msg').classList.remove('err'); $('msg').textContent='Conferindo o que será apagado…';
+  try{
+    const idx=await lerIndice(col);
+    const dias=Object.keys(idx).filter(d=>d.startsWith(mes));
+    const nOrig=orig?await contarDocs(col,filtroMes(mes,prox)):0;
+    if(!dias.length && !nOrig){
+      $('msg').textContent=orig?`Não há dados de ${rot} em "${nome}".`:`Não há cópia compartilhada de ${rot}. Marque a opção dos dados originais para apagar do Firebase.`;
+      return;
+    }
+    let txt=`Apagar ${rot} de "${nome}"?\n\n• Cópia compartilhada: ${dias.length} dia(s)`;
+    txt+=orig?`\n• Dados ORIGINAIS no Firebase: ${nOrig} documento(s) — NÃO dá para desfazer`
+             :`\n(Os dados originais não serão apagados; o mês poderá ser buscado de novo.)`;
+    txt+=`\n\nTambém sai do cache deste navegador. Digite ${rot} para confirmar:`;
+    if(prompt(txt)!==rot){ $('msg').textContent='Cancelado. Nada foi apagado.'; return; }
+    while(trab) await new Promise(r=>setTimeout(r,200));
+    trab=true; $('colecao').disabled=true; $('fMes').disabled=true;
+    try{
+      // Primeiro some do índice (ninguém vê o dia sem dados), depois apaga os blocos.
+      $('msg').textContent='Apagando a cópia compartilhada…';
+      await removerDoIndice(col,dias);
+      const prefixo=`projects/${PROJECT}/databases/(default)/documents/${SYNC_COL}/`, blocos=[];
+      dias.forEach(d=>{ for(let i=0;i<idx[d].chunks;i++) blocos.push(`${prefixo}dia-${col}-${d}-${i}`); });
+      await excluirDocs(blocos);
+      let apagados=0;
+      if(orig) apagados=await apagarOriginais(col,mes,prox,n=>{ $('msg').textContent=`Apagando dados originais… ${n} de ${nOrig}`; });
+      // Limpa também o cache e a tela deste navegador.
+      const no=d=>String(d||'').startsWith(mes);
+      dados=dados.filter(o=>!no(o._dataReferenciaImportacao));
+      [...diasBuscados].filter(no).forEach(d=>diasBuscados.delete(d));
+      Object.keys(syncLocal).filter(no).forEach(d=>delete syncLocal[d]);
+      Object.keys(indiceRemoto).filter(no).forEach(d=>delete indiceRemoto[d]);
+      await cacheGravar(col,dados,diasBuscados,syncLocal);
+      if($('fMes').value===mes) $('fMes').value='';
+      renderCal(); montarFiltros(); aplicar();
+      $('msg').textContent=`${rot} apagado: ${dias.length} dia(s) da cópia compartilhada`+(orig?` e ${apagados} documento(s) originais`:'')+'. Os outros usuários podem manter esse mês no cache deles até limparem.';
+      atualizarUso();
+    }finally{ trab=false; $('colecao').disabled=false; $('fMes').disabled=false; }
+  }catch(e){ console.error(e); $('msg').classList.add('err'); $('msg').textContent='Não foi possível apagar: '+traduzirErro(e.message)+' (o que já foi apagado não volta; rode de novo para continuar).'; }
+  finally{ $('apagarBtn').disabled=false; }
+}
+
 // ---------- Eventos ----------
 $('entrar').onclick=async()=>{
-  $('lmsg').textContent=''; $('entrar').disabled=true;
+  $('lmsg').textContent='Entrando…'; $('entrar').disabled=true;
   try{
     if(!API_KEY||!PROJECT||/^COLE_/.test(API_KEY)||/^COLE_/.test(PROJECT)) throw new Error('Configuração ausente: preencha apiKey e project no bloco "cfg" do HTML.');
     await login($('email').value.trim(),$('senha').value);
@@ -519,11 +709,15 @@ $('entrar').onclick=async()=>{
     }catch(e){}
     $('login').classList.add('hide'); $('app').classList.remove('hide');
     $('sair').classList.remove('hide'); $('user').textContent=$('email').value.trim();
+    if(ehAdmin()) $('uso').classList.remove('hide');
     await mostrarCache();
     sincronizar();
+    atualizarUso();
   }catch(e){console.error(e);$('lmsg').textContent=traduzirErro(e.message);}
   $('entrar').disabled=false;
 };
+window.addEventListener('error',e=>{ const m=$('lmsg'); if(m&&!$('login').classList.contains('hide')) m.textContent='Erro no painel: '+(e.message||'desconhecido'); });
+window.addEventListener('unhandledrejection',e=>{ const m=$('lmsg'); if(m&&!$('login').classList.contains('hide')) m.textContent='Erro: '+traduzirErro(String((e.reason&&e.reason.message)||e.reason||'')); });
 $('senha').onkeydown=e=>{if(e.key==='Enter')$('entrar').click();};
 $('sair').onclick=()=>location.reload();
 $('colecao').onchange=async()=>{ await mostrarCache(); sincronizar(); };
@@ -552,8 +746,8 @@ $('carregar').onclick=async()=>{
     let aviso='';
     const em=new Date().toISOString(), por=$('user').textContent;
     try{
-      await publicarDia(col,dia,novos,em,por);
-      syncLocal[dia]={em,por}; indiceRemoto[dia]={em,por,chunks:0,total:novos.length};
+      const bytes=await publicarDia(col,dia,novos,em,por);
+      syncLocal[dia]={em,por}; indiceRemoto[dia]={em,por,chunks:0,total:novos.length,bytes};
       aviso=' Dia compartilhado com os outros usuários.';
     }catch(e){ console.error(e); aviso=' Atenção: não foi possível compartilhar com os outros usuários ('+traduzirErro(e.message)+').'; }
     await cacheGravar(col,todos,diasBuscados,syncLocal);
@@ -561,6 +755,7 @@ $('carregar').onclick=async()=>{
     renderCal();
     montarFiltros(); aplicar();
     $('msg').textContent=`${novos.length} registros buscados da data ${dia} às ${new Date().toLocaleTimeString('pt-BR')}. Total no cache: ${dados.length}.${aviso}`;
+    atualizarUso();
   }catch(e){console.error(e);$('msg').textContent=traduzirErro(e.message);$('msg').classList.add('err');}
   finally{ trab=false; $('colecao').disabled=false; $('carregar').disabled=false; }
 };
@@ -600,6 +795,9 @@ document.addEventListener('click',()=>$('cal').classList.add('hide'));
 // Escolher um mês baixa de uma vez todos os dias desse mês que outros usuários já compartilharam.
 $('fMes').onchange=async()=>{ const mes=$('fMes').value; if(mes) await sincronizar(true,mes); opcoesData(); aplicar(); };
 $('sincBtn').onclick=()=>sincronizar(true);
+$('usoBtn').onclick=atualizarUso;
+$('usoCfg').onclick=ajustarUso;
+$('apagarBtn').onclick=apagarMes;
 // Verifica a cada 3 min se outro usuário buscou um dia novo (1 leitura por verificação).
 setInterval(()=>{ if(!document.hidden && token) sincronizar(); },180000);
 $('busca').oninput=aplicar;
