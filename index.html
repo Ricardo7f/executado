@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-jRDQueT8uJXF1xIxAWt40ScxDxQBo/ExSgPixdF0gB8=' https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js; style-src 'unsafe-inline'; img-src data:; connect-src https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-3fXDBG3YQxLWVO9h7O5ystcihAy6Gq5r97lVk/It13o=' https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js; style-src 'unsafe-inline'; img-src data:; connect-src https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex, nofollow">
 <title>Iguá – Painel Firebase</title>
 <!-- ============ CONFIGURAÇÃO: edite só os valores abaixo (admins = e-mails que veem armazenamento e apagar mês) ============ -->
@@ -101,6 +101,7 @@ button.danger{background:#d33}
           <div class="cal hide" id="cal"></div>
         </div>
         <button id="carregar">Buscar no Firebase</button>
+        <button id="buscarMes" title="Busca no Firebase só os dias do mês que ainda não foram buscados">Buscar mês</button>
         <button class="sec" id="limpar">Limpar cache</button>
         <button class="sec" id="sincBtn" title="Baixar os dias buscados por outros usuários">↻ Sincronizar</button>
         <button class="sec" id="xlsx">Exportar XLSX (filtrado)</button>
@@ -758,6 +759,82 @@ $('carregar').onclick=async()=>{
     atualizarUso();
   }catch(e){console.error(e);$('msg').textContent=traduzirErro(e.message);$('msg').classList.add('err');}
   finally{ trab=false; $('colecao').disabled=false; $('carregar').disabled=false; }
+};
+// ---------- Buscar o mês inteiro (só os dias que ainda faltam) ----------
+const somaDia=(s,n)=>{ const d=new Date(s+'T12:00:00'); d.setDate(d.getDate()+n); return isoLocal(d); };
+const dmy=s=>s.split('-').reverse().join('/');
+async function carregarIntervalo(col,ini,fimExcl){
+  const t = await getToken();
+  const campo={fieldPath:'_dataReferenciaImportacao'};
+  const r = await fetch(`${baseDocs()}:runQuery`,{method:'POST',
+    headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'},
+    body:JSON.stringify({structuredQuery:{from:[{collectionId:col}],where:{compositeFilter:{op:'AND',filters:[
+      {fieldFilter:{field:campo,op:'GREATER_THAN_OR_EQUAL',value:{stringValue:ini}}},
+      {fieldFilter:{field:campo,op:'LESS_THAN',value:{stringValue:fimExcl}}}]}}}})});
+  const j = await r.json();
+  if(!r.ok) throw new Error((Array.isArray(j)?j[0]?.error?.message:j.error?.message) || 'Erro ao consultar o Firestore');
+  const out=[];
+  (j||[]).forEach(x=>{ if(x.document){ const o=docParaObjeto(x.document); if(temDescricao(o)) out.push(o); } });
+  return out;
+}
+// Agrupa os dias que faltam em janelas de dias seguidos (no máximo 7 por consulta).
+function janelasDeDias(dias){
+  const jan=[]; let at=[];
+  for(const s of dias){
+    if(at.length && (somaDia(at[at.length-1],1)!==s || at.length>=7)){ jan.push(at); at=[]; }
+    at.push(s);
+  }
+  if(at.length) jan.push(at);
+  return jan;
+}
+$('buscarMes').onclick=async()=>{
+  const ref=$('dataBuscar').value || ($('fMes').value?$('fMes').value+'-01':isoLocal(new Date()));
+  const mes=ref.slice(0,7), col=$('colecao').value, rot=`${mes.slice(5)}/${mes.slice(0,4)}`;
+  $('buscarMes').disabled=true; $('carregar').disabled=true; $('msg').classList.remove('err');
+  try{
+    $('msg').textContent=`Mês ${rot}: conferindo o que já foi buscado…`;
+    await sincronizar(true,mes);                       // 1º traz o que outros usuários já compartilharam
+    const hoje=isoLocal(new Date());
+    const total=new Date(+mes.slice(0,4),+mes.slice(5),0).getDate(), faltam=[];
+    for(let d=1;d<=total;d++){
+      const s=`${mes}-${pad(d)}`; if(s>hoje) break;
+      // Dias já buscados não são buscados de novo; só "hoje" é refeito, porque ainda pode receber registros.
+      if(s===hoje || !(diasBuscados.has(s)||indiceRemoto[s])) faltam.push(s);
+    }
+    if(!faltam.length){ $('msg').textContent=`Mês ${rot}: todos os dias já foram buscados. Nada a buscar.`; return; }
+    if(!confirm(`Buscar no Firebase ${faltam.length} dia(s) de ${rot} que ainda faltam (gasta leituras)? Os dias já buscados não serão buscados de novo.`)){ $('msg').textContent=''; return; }
+    while(trab) await new Promise(r=>setTimeout(r,200));
+    trab=true; $('colecao').disabled=true;
+    const por=$('user').textContent, jan=janelasDeDias(faltam);
+    let regs=0, falhas=0;
+    try{
+      for(let i=0;i<jan.length;i++){
+        const j=jan[i], ult=j[j.length-1];
+        $('msg').textContent=`Buscando ${dmy(j[0])}${j.length>1?' a '+dmy(ult):''} (${i+1}/${jan.length})…`;
+        const novos=await carregarIntervalo(col,j[0],somaDia(ult,1));
+        const porDia={}; j.forEach(d=>porDia[d]=[]);
+        novos.forEach(o=>{ const d=o._dataReferenciaImportacao; if(porDia[d]) porDia[d].push(o); });
+        const em=new Date().toISOString();
+        dados=dados.filter(o=>!porDia[o._dataReferenciaImportacao]).concat(novos);
+        for(const d of j){
+          // Dia sem registros só é dado como buscado se já passou; "hoje" vazio fica para a próxima busca.
+          if(!porDia[d].length && d>=hoje) continue;
+          diasBuscados.add(d);
+          try{
+            const bytes=await publicarDia(col,d,porDia[d],em,por);
+            syncLocal[d]={em,por}; indiceRemoto[d]={em,por,chunks:0,total:porDia[d].length,bytes};
+          }catch(e){ console.error(e); falhas++; }
+        }
+        regs+=novos.length;
+        await cacheGravar(col,dados,diasBuscados,syncLocal);   // guarda a cada janela: se cair, não perde o que já veio
+        renderCal(); montarFiltros(); aplicar();
+      }
+      $('msg').textContent=`Mês ${rot}: ${regs} registros buscados em ${faltam.length} dia(s), às ${new Date().toLocaleTimeString('pt-BR')}. Total no cache: ${dados.length}.`
+        +(falhas?` Atenção: ${falhas} dia(s) não puderam ser compartilhados com os outros usuários.`:' Dias compartilhados com os outros usuários.');
+      atualizarUso();
+    }finally{ trab=false; $('colecao').disabled=false; }
+  }catch(e){ console.error(e); $('msg').textContent=traduzirErro(e.message); $('msg').classList.add('err'); }
+  finally{ $('buscarMes').disabled=false; $('carregar').disabled=false; }
 };
 $('limpar').onclick=async()=>{
   if(!confirm('Apagar os dados em cache desta coleção? Os dias compartilhados por outros usuários serão baixados de novo.')) return;
