@@ -1,759 +1,891 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Fórum</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-3fXDBG3YQxLWVO9h7O5ystcihAy6Gq5r97lVk/It13o=' https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js; style-src 'unsafe-inline'; img-src data:; connect-src https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com; base-uri 'none'; form-action 'none'">
+<meta name="robots" content="noindex, nofollow">
+<title>Iguá – Painel Firebase</title>
+<!-- ============ CONFIGURAÇÃO: edite só os valores abaixo (admins = e-mails que veem armazenamento e apagar mês) ============ -->
+<script type="application/json" id="cfg">
+{"apiKey":"AIzaSyBas8b0hHPoB8TiqE1nY0hgJYGGd4o0Hh8","project":"executados-4c21f","admins":["ricardo.fontes.v347@gmail.com"]}
+</script>
+<!-- ======================================================================= -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <style>
-:root{
-  --laranja:#e7622c; --laranja-esc:#c94e1b; --slate:#4d698e; --texto:#2b3440; --suave:#6b7a90;
-  --linha:#e6ebf1; --fundo:#fff; --fundo2:#f4f6f9; --hover:#f7f9fb;
-  --max:#d92d20; --alta:#e8661a; --media:#a87500; --baixa:#26864f;
-  --raio:6px;
-}
+:root{--bg:#f4f6f9;--card:#fff;--tx:#1b2430;--mut:#6b7686;--bd:#dfe4ec;--ac:#0a7cff;--ok:#12a150;--hd:#eef2f8}
+@media (prefers-color-scheme:dark){:root{--bg:#10141a;--card:#1a2029;--tx:#e6ebf2;--mut:#8f9bab;--bd:#2b3441;--ac:#4da3ff;--ok:#3ccf7e;--hd:#222b37}}
 *{box-sizing:border-box}
-html,body{margin:0}
-body{font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--texto);background:var(--fundo)}
-body.carregando #login,body.carregando #espera,body.carregando #app{display:none}
-button{font:inherit;cursor:pointer}
-:focus-visible{outline:2px solid var(--laranja);outline-offset:2px}
-.oculto{display:none!important}
-
-/* ---------- login / espera ---------- */
-#login,#espera{min-height:100vh;display:grid;place-items:center;background:var(--fundo2);padding:20px}
-.login-box{width:100%;max-width:380px;background:#fff;border:1px solid var(--linha);border-radius:10px;padding:28px}
-.logo{display:flex;align-items:center;gap:8px;font-weight:800;font-size:22px;color:var(--laranja);letter-spacing:-.5px}
-.logo svg{width:28px;height:28px}
-.login-box h1{margin:18px 0 4px;font-size:18px}
-.login-box p{margin:0 0 18px;color:var(--suave);font-size:14px}
-label{display:block;font-size:13px;font-weight:600;margin:12px 0 4px}
-input[type=text],input[type=email],input[type=password],textarea{
-  width:100%;padding:9px 11px;border:1px solid #d3dbe5;border-radius:var(--raio);font:inherit;color:inherit;background:#fff}
-textarea{resize:vertical;min-height:110px}
-input:focus,textarea:focus{border-color:var(--laranja);outline:none;box-shadow:0 0 0 3px #e7622c22}
-.btn{border:0;border-radius:var(--raio);padding:9px 16px;font-weight:600;background:#e8edf3;color:var(--slate)}
-.btn:hover{background:#dce3ec}
-.btn.prim{background:var(--laranja);color:#fff}
-.btn.prim:hover{background:var(--laranja-esc)}
-.btn.ok{background:var(--baixa);color:#fff}
-.btn.ok:hover{background:#1d6d3f}
-.btn.perigo{background:#fdeceb;color:var(--max)}
-.btn.perigo:hover{background:#fbd9d6}
-.btn.peq{padding:6px 12px;font-size:13px}
-.btn.larg{width:100%;margin-top:18px;padding:11px}
-.btn[disabled]{opacity:.55;cursor:default}
-.troca{margin-top:14px;text-align:center;font-size:14px;color:var(--suave)}
-.troca button{background:none;border:0;color:var(--laranja);font-weight:600;padding:0}
-.erro{margin-top:12px;color:var(--max);font-size:13px;min-height:1em}
-
-/* ---------- topo ---------- */
-header{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--linha);height:56px;display:flex;align-items:center;gap:18px;padding:0 20px}
-.busca{flex:1;max-width:340px;margin-left:auto}
-.busca input{background:#eef1f6;border-color:transparent;padding:8px 12px}
-.usuario{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;color:var(--slate)}
-.usuario .sair{background:none;border:0;color:var(--suave);font-size:13px;font-weight:500;padding:4px 6px}
-.usuario .sair:hover{color:var(--laranja)}
-.tag-admin{font-size:11px;font-weight:700;background:var(--texto);color:#fff;border-radius:4px;padding:1px 6px}
-
-/* ---------- layout ---------- */
-.corpo{max-width:1120px;margin:0 auto;padding:24px 20px 60px;display:grid;grid-template-columns:216px 1fr;gap:32px}
-aside .btn.prim{width:100%;padding:11px;font-size:15px;margin-bottom:18px}
-nav .item{display:flex;align-items:center;gap:10px;width:100%;background:none;border:0;text-align:left;padding:8px 10px;border-radius:var(--raio);color:var(--slate);font-weight:600}
-nav .item:hover{background:var(--fundo2)}
-nav .item.ativo{color:var(--laranja)}
-nav .item .n{margin-left:auto;font-size:12px;font-weight:700;background:#e8edf3;border-radius:10px;padding:1px 8px;color:var(--slate)}
-nav .item .n.alerta{background:var(--laranja);color:#fff}
-nav .item .ponto{width:10px;height:10px;border-radius:50%;margin:0 4px}
-nav hr{border:0;border-top:1px solid var(--linha);margin:10px 0}
-
-.barra{display:flex;align-items:center;gap:12px;margin-bottom:10px}
-.barra h2{margin:0;font-size:17px}
-.barra .sub{color:var(--suave);font-size:13px}
-.barra .btn{margin-left:auto;padding:6px 12px;font-size:13px}
-
-.banner{display:flex;align-items:center;gap:12px;margin-bottom:14px;border-radius:var(--raio);padding:10px 14px;font-size:14px;background:#fdeee6;color:#8a3410;border:1px solid #f6cdb8}
-.banner .btn{margin-left:auto;padding:5px 12px;font-size:13px}
-
-.lista{list-style:none;margin:0;padding:0}
-.topico{display:flex;align-items:center;gap:14px;padding:13px 10px;border-bottom:1px solid var(--linha);cursor:pointer;border-radius:var(--raio)}
-.topico:hover{background:var(--hover)}
-.topico.sem-clique{cursor:default}
-.topico.sem-clique:hover{background:none}
-.avatar{flex:none;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:700;font-size:15px}
-.avatar.p{width:30px;height:30px;font-size:12px}
-.topico .info{flex:1;min-width:0}
-.topico .tit{font-size:16px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.topico .meta{font-size:13px;color:var(--suave)}
-.topico .lado{display:flex;align-items:center;gap:12px;flex:none}
-.cont{display:flex;align-items:center;gap:4px;color:var(--suave);font-size:14px;min-width:34px}
-.cont svg{width:16px;height:16px}
-.cont.verde{color:var(--baixa);font-weight:600}
-.badge{font-size:12px;font-weight:700;border-radius:4px;padding:2px 8px;color:#fff;white-space:nowrap}
-.badge.maxima{background:var(--max)}.badge.alta{background:var(--alta)}.badge.media{background:var(--media)}.badge.baixa{background:var(--baixa)}
-.badge.pend{background:#e8edf3;color:var(--slate)}
-.badge.arq{background:#e8edf3;color:var(--suave)}
-.badge.rec{background:#fdeceb;color:var(--max)}
-.vazio{text-align:center;padding:60px 20px;color:var(--suave)}
-.vazio strong{display:block;color:var(--texto);font-size:16px;margin-bottom:4px}
-
-/* ---------- modal ---------- */
-.fundo-modal{position:fixed;inset:0;background:#1d2733aa;z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto}
-.modal{background:#fff;border-radius:10px;width:100%;max-width:680px;box-shadow:0 20px 50px #0004;animation:sobe .14s ease-out}
-@keyframes sobe{from{transform:translateY(8px);opacity:.4}to{transform:none;opacity:1}}
-.modal .topo{display:flex;align-items:flex-start;gap:12px;padding:20px 22px 0}
-.modal h3{margin:0;font-size:20px;line-height:1.3;flex:1}
-.fechar{background:none;border:0;font-size:24px;line-height:1;color:var(--suave);padding:0 4px}
-.modal .corpo-m{padding:14px 22px 22px}
-.modal .quem{display:flex;align-items:center;gap:10px;color:var(--suave);font-size:13px;margin:10px 0 14px}
-.modal .quem b{color:var(--texto)}
-.desc{white-space:pre-wrap;word-break:break-word;background:var(--fundo2);border-radius:var(--raio);padding:14px 16px}
-.acoes{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
-.aviso{margin-top:16px;border-radius:var(--raio);padding:11px 14px;font-size:14px;background:#fff6e5;color:#7a5600}
-.aviso.neutro{background:var(--fundo2);color:var(--suave)}
-.resp-tit{margin:24px 0 4px;font-size:14px;font-weight:700;color:var(--slate)}
-.resp{display:flex;gap:10px;padding:12px 0;border-bottom:1px solid var(--linha)}
-.resp .nome{font-weight:600;font-size:14px}
-.resp .nome span{font-weight:400;color:var(--suave);font-size:12px;margin-left:6px}
-.resp .txt{white-space:pre-wrap;word-break:break-word}
-.nova-resp{margin-top:14px}
-.nova-resp textarea{min-height:70px}
-.nova-resp .btn{margin-top:8px}
-.urg-opcoes{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-.urg-opcoes input{position:absolute;opacity:0}
-.urg-opcoes label{margin:0;text-align:center;border:2px solid var(--linha);border-radius:var(--raio);padding:9px 4px;cursor:pointer;font-weight:700;font-size:14px;color:var(--suave)}
-.urg-opcoes input:checked+label.maxima{border-color:var(--max);background:#fdeceb;color:var(--max)}
-.urg-opcoes input:checked+label.alta{border-color:var(--alta);background:#fff0e5;color:var(--alta)}
-.urg-opcoes input:checked+label.media{border-color:var(--media);background:#fff6dd;color:var(--media)}
-.urg-opcoes input:checked+label.baixa{border-color:var(--baixa);background:#e8f6ee;color:var(--baixa)}
-.urg-opcoes input:focus-visible+label{outline:2px solid var(--laranja);outline-offset:2px}
-.contador{font-size:12px;color:var(--suave);text-align:right;margin-top:2px}
-.rodape-form{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
-
-#toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--texto);color:#fff;padding:10px 18px;border-radius:var(--raio);font-size:14px;z-index:99;opacity:0;pointer-events:none;transition:opacity .2s}
-#toast.mostra{opacity:1}
-
-@media (max-width:760px){
-  .corpo{grid-template-columns:1fr;gap:14px;padding:14px 12px 60px}
-  nav{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px}
-  nav .item{width:auto;white-space:nowrap;background:var(--fundo2)}
-  nav .item.ativo{background:#fdeee6}
-  nav hr{display:none}
-  header{padding:0 12px;gap:10px}
-  .busca{max-width:none}
-  .usuario .nome-u{display:none}
-  .topico .lado .cont:nth-child(n+3){display:none}
-  .topico .tit{white-space:normal}
-  .topico.sem-clique{flex-wrap:wrap}
-}
-@media (prefers-reduced-motion:reduce){.modal{animation:none}#toast{transition:none}}
+body{margin:0;font:14px/1.4 system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--tx)}
+header{padding:14px 20px;background:var(--card);border-bottom:1px solid var(--bd);display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+h1{font-size:18px;margin:0;flex:1}
+main{padding:16px 20px;max-width:1500px;margin:auto}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px;margin-bottom:14px}
+input,select,button{font:inherit;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--tx)}
+button{cursor:pointer;background:var(--ac);color:#fff;border:0;font-weight:600}
+button.sec{background:var(--hd);color:var(--tx);border:1px solid var(--bd)}
+button:disabled{opacity:.5;cursor:wait}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+.row label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mut)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.kpi b{display:block;font-size:26px}
+.kpi span{color:var(--mut);font-size:12px}
+.tw{overflow:auto;max-height:65vh;border:1px solid var(--bd);border-radius:8px}
+table{border-collapse:collapse;width:100%;white-space:nowrap}
+th,td{padding:7px 10px;border-bottom:1px solid var(--bd);text-align:left}
+th{position:sticky;top:0;background:var(--hd);cursor:pointer;user-select:none}
+tr:hover td{background:var(--hd)}
+.bars>div{display:grid;grid-template-columns:minmax(200px,45%) 1fr auto;align-items:center;gap:10px;margin:6px 0;font-size:12px}
+.bars .nome{white-space:normal;word-break:break-word}
+.bars .trilho{min-width:0}
+.bars i{display:block;height:10px;background:var(--ac);border-radius:4px}
+#msg{color:var(--mut);font-size:13px;margin:6px 0}
+.err{color:#d33!important}
+.pg{display:flex;gap:8px;align-items:center;margin-top:10px}
+.hide{display:none}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-bottom:14px}
+.grid2 .card{margin-bottom:0}
+.calwrap{position:relative}
+.cal{position:absolute;top:calc(100% + 6px);left:0;z-index:20;width:290px;background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:10px;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+.calh{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;text-transform:capitalize}
+.calh button{padding:4px 10px}
+.calg{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}
+.calg .sem{font-size:11px;color:var(--mut)}
+.calg .dia{padding:6px 0;background:transparent;color:var(--tx);border:1px solid transparent;font-weight:500}
+.calg .dia:hover{border-color:var(--ac)}
+.calg .dia.ok{background:var(--ok);color:#fff}
+.calg .dia.hoje{border-color:var(--mut)}
+.calg .dia.sel{outline:2px solid var(--ac);outline-offset:1px}
+.leg{margin-top:8px;font-size:12px;color:var(--mut);display:flex;align-items:center;gap:6px}
+.leg i{display:inline-block;width:12px;height:12px;border-radius:3px;background:var(--ok)}
+#sinc{color:var(--mut);font-size:12px;margin:2px 0}
+.barra{height:14px;background:var(--hd);border:1px solid var(--bd);border-radius:8px;overflow:hidden;margin:8px 0}
+.barra i{display:block;height:100%;width:0;background:var(--ok);transition:width .3s}
+.barra i.mid{background:#e0a100}
+.barra i.alto{background:#d33}
+button.danger{background:#d33}
+#usoTxt{color:var(--mut);font-size:12px}
+.chk{flex-direction:row!important;align-items:center;gap:6px!important}
 </style>
 </head>
-<body class="carregando">
-
-<!-- ================= LOGIN ================= -->
-<section id="login">
-  <div class="login-box">
-    <div class="logo">
-      <svg viewBox="0 0 28 28" fill="currentColor" aria-hidden="true"><path d="M3 4h22v15H13l-6 5v-5H3z"/></svg>
-      Fórum
+<body>
+<header>
+  <h1>Painel</h1>
+  <span id="user" style="color:var(--mut)"></span>
+  <button class="sec hide" id="sair">Sair</button>
+</header>
+<main>
+  <div class="card" id="login">
+    <div class="row">
+      <label>E-mail<input id="email" type="email" autocomplete="username"></label>
+      <label>Senha<input id="senha" type="password" autocomplete="current-password"></label>
+      <button id="entrar">Entrar</button>
     </div>
-    <h1 id="login-titulo">Entrar</h1>
-    <p>Acompanhe as publicações da equipe.</p>
-    <form id="form-login" autocomplete="on">
-      <div id="campo-nome" class="oculto">
-        <label for="l-nome">Nome</label>
-        <input type="text" id="l-nome" maxlength="40" autocomplete="name">
-      </div>
-      <label for="l-email">E-mail</label>
-      <input type="email" id="l-email" required autocomplete="email">
-      <label for="l-senha">Senha</label>
-      <input type="password" id="l-senha" required minlength="6" autocomplete="current-password">
-      <button class="btn prim larg" id="l-enviar" type="submit">Entrar</button>
-      <div class="erro" id="l-erro" role="alert"></div>
-    </form>
-    <div class="troca"><span id="troca-txt">Ainda não tem conta?</span> <button type="button" id="troca-btn">Criar conta</button></div>
+    <div id="lmsg" class="err"></div>
   </div>
-</section>
 
-<!-- ================= AGUARDANDO APROVAÇÃO DO CADASTRO ================= -->
-<section id="espera" class="oculto">
-  <div class="login-box">
-    <div class="logo">
-      <svg viewBox="0 0 28 28" fill="currentColor" aria-hidden="true"><path d="M3 4h22v15H13l-6 5v-5H3z"/></svg>
-      Fórum
+  <div id="app" class="hide">
+    <div class="card">
+      <div class="row">
+        <label>Grupo / coleção
+          <select id="colecao">
+            <option value="atividades_corte_religacao">Corte e Religação</option>
+            <option value="camel_fiscalizacao_sul">Fiscalização Sul</option>
+          </select>
+        </label>
+        <label>Data a buscar no Firebase
+          <input id="dataBuscar" type="date">
+        </label>
+        <div class="calwrap">
+          <button class="sec" id="calBtn" type="button" title="Ver dias já buscados">📅</button>
+          <div class="cal hide" id="cal"></div>
+        </div>
+        <button id="carregar">Buscar no Firebase</button>
+        <button id="buscarMes" title="Busca no Firebase só os dias do mês que ainda não foram buscados">Buscar mês</button>
+        <button class="sec" id="limpar">Limpar cache</button>
+        <button class="sec" id="sincBtn" title="Baixar os dias buscados por outros usuários">↻ Sincronizar</button>
+        <button class="sec" id="xlsx">Exportar XLSX (filtrado)</button>
+      </div>
+      <div id="msg"></div>
+      <div id="sinc"></div>
     </div>
-    <h1 id="e-titulo"></h1>
-    <p id="e-texto"></p>
-    <button class="btn larg" data-act="sair">Sair</button>
-  </div>
-</section>
 
-<!-- ================= APP ================= -->
-<div id="app" class="oculto">
-  <header>
-    <div class="logo">
-      <svg viewBox="0 0 28 28" fill="currentColor" aria-hidden="true"><path d="M3 4h22v15H13l-6 5v-5H3z"/></svg>
-      Fórum
+    <div class="card hide" id="uso">
+      <div class="row" style="align-items:center">
+        <b style="flex:1">Armazenamento do Firebase (estimado)</b>
+        <button class="sec" id="usoBtn" type="button" title="Recalcular">↻</button>
+        <button class="sec" id="usoCfg" type="button" title="Ajustar limite e calibrar">⚙</button>
+      </div>
+      <div class="barra"><i id="usoFill"></i></div>
+      <div id="usoTxt">Entre para ver o uso.</div>
+      <div class="row" style="margin-top:12px">
+        <label>Apagar um mês inteiro (da coleção selecionada acima)<input id="mesApagar" type="month"></label>
+        <label class="chk"><input id="apagarOrig" type="checkbox"> Apagar também os dados originais no Firebase (não dá para desfazer)</label>
+        <button class="danger" id="apagarBtn" type="button">Apagar mês</button>
+      </div>
     </div>
-    <div class="busca"><input type="text" id="busca" placeholder="Buscar nas publicações carregadas" aria-label="Buscar"></div>
-    <div class="usuario"><span class="nome-u" id="u-nome"></span><span class="tag-admin oculto" id="u-admin">admin</span><button class="sair" data-act="sair">Sair</button></div>
-  </header>
 
-  <div class="corpo">
-    <aside>
-      <button class="btn prim" data-act="novo">Nova publicação</button>
-      <nav id="menu" aria-label="Filtros"></nav>
-    </aside>
-    <main id="principal"></main>
-  </div>
-</div>
+    <div class="card kpis" id="kpis"></div>
 
-<!-- ================= MODAIS ================= -->
-<div class="fundo-modal oculto" id="m-novo" role="dialog" aria-modal="true" aria-labelledby="mn-tit">
-  <div class="modal">
-    <div class="topo"><h3 id="mn-tit">Nova publicação</h3><button class="fechar" data-act="fechar" aria-label="Fechar">×</button></div>
-    <form class="corpo-m" id="form-novo">
-      <label for="n-titulo">Título</label>
-      <input type="text" id="n-titulo" maxlength="120" required minlength="3" placeholder="Ex.: Vazamento na Rua das Flores, 120">
-      <label>Grau de urgência</label>
-      <div class="urg-opcoes">
-        <input type="radio" name="urg" id="u1" value="maxima"><label class="maxima" for="u1">Máxima</label>
-        <input type="radio" name="urg" id="u2" value="alta"><label class="alta" for="u2">Alta</label>
-        <input type="radio" name="urg" id="u3" value="media" checked><label class="media" for="u3">Média</label>
-        <input type="radio" name="urg" id="u4" value="baixa"><label class="baixa" for="u4">Baixa</label>
+    <div class="card">
+      <div class="row">
+        <label>Busca<input id="busca" placeholder="qualquer texto…"></label>
+        <label>Mês<select id="fMes"></select></label>
+        <label>Data de referência<select id="fData"></select></label>
+        <label>Serviço<select id="fServ"></select></label>
+        <label>Cidade<select id="fCid"></select></label>
+        <label>Recurso<select id="fRec"></select></label>
       </div>
-      <label for="n-desc">Descrição</label>
-      <textarea id="n-desc" maxlength="2000" required placeholder="Detalhes, endereço, o que precisa ser feito..."></textarea>
-      <div class="contador"><span id="n-cont">0</span>/2000</div>
-      <div class="rodape-form">
-        <button type="button" class="btn" data-act="fechar">Cancelar</button>
-        <button type="submit" class="btn prim" id="n-enviar">Publicar</button>
+    </div>
+
+    <div class="card"><b>Top serviços (filtrado)</b><div class="bars" id="bars"></div></div>
+
+    <div class="grid2">
+      <div class="card"><b>Top recursos (filtrado)</b><div class="bars" id="barsRec"></div></div>
+      <div class="card"><b>Top cidades (filtrado)</b><div class="bars" id="barsCid"></div></div>
+    </div>
+
+    <div class="card">
+      <div class="tw"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+      <div class="pg">
+        <button class="sec" id="prev">‹</button>
+        <span id="pinfo"></span>
+        <button class="sec" id="next">›</button>
       </div>
-    </form>
+    </div>
   </div>
-</div>
+</main>
 
-<div class="fundo-modal oculto" id="m-topico" role="dialog" aria-modal="true" aria-labelledby="mt-tit">
-  <div class="modal" id="m-topico-box"></div>
-</div>
+<script>
+let API_KEY = "", PROJECT = "", ADMINS = [];
+try{ localStorage.removeItem('igua_api_key'); localStorage.removeItem('igua_project'); }catch(e){}
+const $ = id => document.getElementById(id);
+try{ const cfg=JSON.parse($('cfg').textContent); API_KEY=String(cfg.apiKey||'').trim(); PROJECT=String(cfg.project||'').trim(); ADMINS=(cfg.admins||[]).map(e=>String(e).trim().toLowerCase()); }catch(e){}
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+const POR_PAG = 100;
+const CAMPO_DESC = 'Descrição do Serviço';
+let token = null, refresh = null, expira = 0;
+let dados = [], colunas = [], filtrado = [], pagina = 0, ordem = {col:null, asc:true};
+let diasBuscados = new Set();          // dias (AAAA-MM-DD) já buscados na coleção atual
+let calMes = new Date(); calMes.setDate(1);
+let syncLocal = {};                    // dia -> {em, por}: versão compartilhada já aplicada neste navegador
+let indiceRemoto = {};                 // dia -> {em, por}: dias já compartilhados no Firebase (índice)
+let trab = false, ultSync = 0;         // trab = operação em andamento
+const SYNC_COL = 'painel_sync';        // coleção do Firestore usada para compartilhar entre usuários
 
-<div id="toast" role="status"></div>
-
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, signOut }
-  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, addDoc, setDoc, updateDoc,
-  getDocs, onSnapshot, query, where, orderBy, limit, startAfter, writeBatch, increment, arrayUnion }
-  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-/* ============ CONFIGURAÇÃO ============ */
-const firebaseConfig = {
-  apiKey: "AIzaSyC_kXw0UYx9DqxpEyp3URHbDXeVzPRbN0Q",
-  authDomain: "forum-b694f.firebaseapp.com",
-  projectId: "forum-b694f",
-  storageBucket: "forum-b694f.firebasestorage.app",
-  messagingSenderId: "50661581615",
-  appId: "1:50661581615:web:2676b97f98524e41b377da"
-};
-// Admin = documento usuarios/{uid} com o campo admin: true (definido direto no console do Firebase)
-const DIAS_ARQUIVO = 30;            // arquivadas são apagadas depois desse prazo
-const DIA_MS = 86400000;
-
-/* Economia de recursos:
-   - sem Analytics
-   - cache local persistente (reabrir o app lê quase nada do servidor)
-   - listener da lista só fica ligado com a aba visível
-   - respostas só são lidas ao abrir uma publicação
-   - arquivadas só são lidas ao abrir a aba "Arquivadas", 20 por vez
-   - admin é definido pelo e-mail (sem leitura extra no banco) */
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
-const TOPICOS = collection(db, "topicos");
-const USUARIOS = collection(db, "usuarios");
-
-/* ============ UTILITÁRIOS ============ */
-const $ = s => document.querySelector(s);
-const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
-const URG = {
-  maxima:{ n:1, l:"Máxima", cor:"var(--max)" },
-  alta:  { n:2, l:"Alta",   cor:"var(--alta)" },
-  media: { n:3, l:"Média",  cor:"var(--media)" },
-  baixa: { n:4, l:"Baixa",  cor:"var(--baixa)" }
-};
-function ago(ms){
-  const s = Math.floor((Date.now() - ms) / 1000);
-  if (s < 60) return "agora há pouco";
-  const m = Math.floor(s / 60); if (m < 60) return `há ${m} min`;
-  const h = Math.floor(m / 60); if (h < 24) return `há ${h} h`;
-  const d = Math.floor(h / 24); if (d < 30) return `há ${d} ${d === 1 ? "dia" : "dias"}`;
-  return new Date(ms).toLocaleDateString("pt-BR");
+// ---------- Cache local (IndexedDB) ----------
+// Guarda os registros já baixados de cada coleção no navegador, para
+// não precisar ler o Firebase de novo toda vez que a página abrir.
+function abrirDB(){
+  return new Promise((res,rej)=>{
+    const rq=indexedDB.open('igua_painel_cache',1);
+    rq.onupgradeneeded=()=>rq.result.createObjectStore('colecoes');
+    rq.onsuccess=()=>res(rq.result);
+    rq.onerror=()=>rej(rq.error);
+  });
 }
-function diasRestantes(arquivadoEm){ return Math.max(0, Math.ceil((arquivadoEm + DIAS_ARQUIVO * DIA_MS - Date.now()) / DIA_MS)); }
-function txtDias(n){ return n === 0 ? "hoje" : n === 1 ? "em 1 dia" : `em ${n} dias`; }
-function corAvatar(txt){ let h = 0; for (const c of String(txt)) h = (h * 31 + c.charCodeAt(0)) % 360; return `hsl(${h} 45% 45%)`; }
-function avatar(nome, uid, peq){ return `<div class="avatar${peq ? " p" : ""}" style="background:${corAvatar(uid || nome)}" aria-hidden="true">${esc((nome || "?").trim().charAt(0).toUpperCase())}</div>`; }
-let tt;
-function toast(msg){ const t = $("#toast"); t.textContent = msg; t.classList.add("mostra"); clearTimeout(tt); tt = setTimeout(() => t.classList.remove("mostra"), 3200); }
-function erroTxt(e){
-  const c = e?.code || "";
-  if (c.includes("permission-denied")) return "Sem permissão para essa ação.";
-  if (c.includes("invalid-credential") || c.includes("wrong-password") || c.includes("user-not-found")) return "E-mail ou senha incorretos.";
-  if (c.includes("email-already-in-use")) return "Esse e-mail já tem cadastro.";
-  if (c.includes("weak-password")) return "A senha precisa ter ao menos 6 caracteres.";
-  if (c.includes("invalid-email")) return "E-mail inválido.";
-  if (c.includes("too-many-requests")) return "Muitas tentativas. Aguarde um pouco.";
-  if (c.includes("network")) return "Sem conexão com a internet.";
-  return "Algo deu errado. Tente de novo.";
+async function cacheLer(col){
+  try{
+    const db=await abrirDB();
+    return await new Promise((res,rej)=>{
+      const rq=db.transaction('colecoes').objectStore('colecoes').get(col);
+      rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>rej(rq.error);
+    });
+  }catch(e){return null;}
 }
-const nomeDe = u => u?.displayName || (u?.email || "Usuário").split("@")[0];
+async function cacheGravar(col,registros,dias,sync){
+  try{
+    const db=await abrirDB();
+    await new Promise((res,rej)=>{
+      const tx=db.transaction('colecoes','readwrite');
+      tx.objectStore('colecoes').put({registros,diasBuscados:[...dias],sync:sync||{},atualizadoEm:Date.now()},col);
+      tx.oncomplete=res; tx.onerror=()=>rej(tx.error);
+    });
+  }catch(e){console.warn('Não foi possível gravar o cache:',e);}
+}
+async function cacheApagar(col){
+  try{
+    const db=await abrirDB();
+    await new Promise((res,rej)=>{
+      const tx=db.transaction('colecoes','readwrite');
+      tx.objectStore('colecoes').delete(col);
+      tx.oncomplete=res; tx.onerror=()=>rej(tx.error);
+    });
+  }catch(e){}
+}
 
-/* ============ ESTADO ============ */
-let user = null, isAdmin = false;
-let acesso = false;                 // true quando o usuário está liberado (aprovado ou admin)
-let cadastrando = false, criandoPerfil = false;
-let ativos = [];                    // publicações aberto + pendente (listener)
-let usuarios = [];                  // (admin) cadastros pendentes/recusados
-let arq = { itens: [], ultimo: null, fim: false, carregado: false, carregando: false };
-let visao = "todos";                // todos | pendentes | usuarios | arquivados | u:<urgencia>
-let termo = "";
-let cur = null;                     // { id, src: "ativo" | "arq" }
-let editId = null;                  // id da publicação em edição (null = nova)
-let respostas = [], respostasCarregando = false;
-let unsub = null, unsubU = null, unsubPerfil = null, primeiraU = true;
+// ---------- Tradução de erros ----------
+function traduzirErro(m){
+  const s=String(m||'');
+  const t=[
+    [/INVALID_LOGIN_CREDENTIALS|EMAIL_NOT_FOUND|INVALID_PASSWORD/,'E-mail ou senha incorretos.'],
+    [/INVALID_EMAIL/,'E-mail inválido.'],
+    [/MISSING_PASSWORD|MISSING_EMAIL/,'Informe e-mail e senha.'],
+    [/USER_DISABLED/,'Usuário desativado. Fale com o administrador.'],
+    [/TOO_MANY_ATTEMPTS/,'Muitas tentativas. Aguarde alguns minutos e tente de novo.'],
+    [/OPERATION_NOT_ALLOWED/,'Login por e-mail/senha não está habilitado no projeto.'],
+    [/referer|are blocked/i,'Chave de API bloqueada para este endereço (restrição de referrer). Confira no Google Cloud.'],
+    [/API key not valid|API_KEY_INVALID|INVALID_API_KEY/i,'Chave de API inválida.'],
+    [/Missing or insufficient permissions|PERMISSION_DENIED/i,'Sem permissão para ler os dados. Confira as regras do Firestore e se seu usuário está autorizado.'],
+    [/UNAUTHENTICATED|TOKEN_EXPIRED|INVALID_ID_TOKEN|INVALID_REFRESH_TOKEN/i,'Sessão expirada. Entre novamente.'],
+    [/Quota exceeded|RESOURCE_EXHAUSTED/i,'Cota diária do Firebase esgotada (leituras, gravações ou exclusões). Tente mais tarde.'],
+    [/not found or deleted|PROJECT_NOT_FOUND/i,'Projeto não encontrado. Confira o ID do projeto.'],
+    [/Failed to fetch|NetworkError|Load failed/i,'Falha de conexão. Verifique a internet.']
+  ];
+  for(const [r,txt] of t) if(r.test(s)) return txt;
+  return s||'Erro desconhecido.';
+}
 
-/* ============ LISTAS EM TEMPO REAL (só com a aba visível) ============ */
-function iniciarLista(){
-  if (!user || !acesso) return;
-  if (!unsub) {
-    const q = query(TOPICOS, where("status", "in", ["aberto", "pendente"]), limit(150));
-    unsub = onSnapshot(q, snap => {
-      ativos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      render();
-      if (cur?.src === "ativo") {
-        const t = ativos.find(x => x.id === cur.id);
-        if (t) renderModal(); else { fecharModais(); toast("Essa publicação foi arquivada ou removida."); }
-      }
-    }, e => toast(erroTxt(e)));
+// ---------- Autenticação ----------
+let emailLogado='';
+async function login(email, senha){
+  const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${API_KEY}`,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({email,password:senha,returnSecureToken:true})});
+  const j = await r.json();
+  if(!r.ok) throw new Error(j.error?.message || 'Falha no login');
+  token=j.idToken; refresh=j.refreshToken; expira=Date.now()+(+j.expiresIn*1000)-60000;
+  emailLogado=String(j.email||email).trim().toLowerCase();
+}
+async function getToken(){
+  if(Date.now()<expira) return token;
+  const r = await fetch(`https://securetoken.googleapis.com/v1/token?key=${API_KEY}`,{
+    method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:`grant_type=refresh_token&refresh_token=${encodeURIComponent(refresh)}`});
+  const j = await r.json();
+  if(!r.ok) throw new Error('Sessão expirada, entre novamente.');
+  token=j.id_token; refresh=j.refresh_token; expira=Date.now()+(+j.expires_in*1000)-60000;
+  return token;
+}
+
+// ---------- Firestore ----------
+function valor(v){
+  if(!v||typeof v!=='object') return '';
+  if('stringValue' in v) return v.stringValue;
+  if('integerValue' in v) return Number(v.integerValue);
+  if('doubleValue' in v) return v.doubleValue;
+  if('booleanValue' in v) return v.booleanValue;
+  if('timestampValue' in v) return v.timestampValue;
+  if('nullValue' in v) return '';
+  if('referenceValue' in v) return String(v.referenceValue).split('/documents/').pop();
+  if('geoPointValue' in v) return `${v.geoPointValue.latitude}, ${v.geoPointValue.longitude}`;
+  if('bytesValue' in v) return v.bytesValue;
+  if('arrayValue' in v) return (v.arrayValue.values||[]).map(valor).join(', ');
+  if('mapValue' in v){
+    const o={}, f=v.mapValue.fields||{};
+    for(const k in f) o[k]=valor(f[k]);
+    return JSON.stringify(o);
   }
-  if (isAdmin && !unsubU) {
-    primeiraU = true;
-    const q = query(USUARIOS, where("status", "in", ["pendente", "recusado"]), limit(100));
-    unsubU = onSnapshot(q, snap => {
-      usuarios = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.criadoEm - a.criadoEm);
-      if (!primeiraU && snap.docChanges().some(c => c.type === "added" && c.doc.data().status === "pendente")) toast("Novo usuário aguardando sua aprovação.");
-      primeiraU = false;
-      render();
-    }, e => toast(erroTxt(e)));
+  return '';
+}
+// Descrição em branco = registro descartado (não serve).
+function temDescricao(o){
+  return String(o[CAMPO_DESC] ?? '').trim() !== '';
+}
+function docParaObjeto(d){
+  const o={_id:d.name.split('/').pop()};
+  for(const k in d.fields) o[k]=valor(d.fields[k]);
+  return o;
+}
+// Lê só os documentos de uma data de referência (gasta bem menos leituras).
+async function carregarPorData(col,dataISO){
+  const t = await getToken();
+  const r = await fetch(`https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents:runQuery`,{
+    method:'POST',
+    headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'},
+    body:JSON.stringify({structuredQuery:{
+      from:[{collectionId:col}],
+      where:{fieldFilter:{field:{fieldPath:'_dataReferenciaImportacao'},op:'EQUAL',value:{stringValue:dataISO}}}
+    }})});
+  const j = await r.json();
+  if(!r.ok) throw new Error((Array.isArray(j)?j[0]?.error?.message:j.error?.message) || 'Erro ao consultar o Firestore');
+  const out=[];
+  (j||[]).forEach(x=>{ if(x.document){ const o=docParaObjeto(x.document); if(temDescricao(o)) out.push(o); } });
+  return out;
+}
+
+// ---------- Compartilhamento entre usuários ----------
+// Quando alguém busca um dia, o resultado é gravado em "painel_sync" (poucos
+// documentos). Os outros usuários baixam esse resultado em vez de consultar
+// a coleção original, e o dia fica verde no calendário de todos.
+const baseDocs = () => `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
+async function gravarDoc(id,fields,mask){
+  const t = await getToken();
+  const url = `${baseDocs()}/${SYNC_COL}/${encodeURIComponent(id)}`+(mask?`?updateMask.fieldPaths=${encodeURIComponent(mask)}`:'');
+  const r = await fetch(url,{method:'PATCH',headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({fields})});
+  const j = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.error?.message || 'Erro ao gravar no Firestore');
+}
+// Divide os registros em blocos pequenos (limite de 1 MB por documento).
+function dividirBlocos(regs){
+  const TAM=250000, blocos=[]; let atual=[], n=0;
+  for(const r of regs){
+    const t=JSON.stringify(r).length;
+    if(atual.length && n+t>TAM){ blocos.push(atual); atual=[]; n=0; }
+    atual.push(r); n+=t;
   }
+  if(atual.length) blocos.push(atual);
+  return blocos;
 }
-function pararLista(){
-  if (unsub) { unsub(); unsub = null; }
-  if (unsubU) { unsubU(); unsubU = null; }
-}
-document.addEventListener("visibilitychange", () => document.hidden ? pararLista() : iniciarLista());
-
-/* ============ ARQUIVADAS (sob demanda) ============ */
-async function carregarArquivados(mais){
-  if (arq.carregando) return;
-  arq.carregando = true; render();
-  try {
-    if (!mais) arq = { itens: [], ultimo: null, fim: false, carregado: false, carregando: true };
-    const base = [TOPICOS, where("arquivadoEm", ">", 0), orderBy("arquivadoEm", "desc")];
-    if (mais && arq.ultimo) base.push(startAfter(arq.ultimo));
-    const snap = await getDocs(query(...base, limit(20)));
-    arq.itens = arq.itens.concat(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    arq.ultimo = snap.docs[snap.docs.length - 1] || arq.ultimo;
-    arq.fim = snap.docs.length < 20;
-    arq.carregado = true;
-  } catch (e) { toast(erroTxt(e)); }
-  arq.carregando = false; render();
-}
-
-/* ============ APAGAR (publicação + respostas) ============ */
-async function apagarTopico(id, temRespostas){
-  const b = writeBatch(db);
-  if (temRespostas) {
-    const s = await getDocs(query(collection(db, "topicos", id, "respostas"), limit(450)));
-    s.docs.forEach(d => b.delete(d.ref));
+async function publicarDia(col,dia,regs,em,por){
+  const blocos=dividirBlocos(regs);
+  let bytes=0;
+  for(let i=0;i<blocos.length;i++){
+    const js=JSON.stringify(blocos[i]); bytes+=js.length+100;
+    await gravarDoc(`dia-${col}-${dia}-${i}`,{json:{stringValue:js}});
   }
-  b.delete(doc(db, "topicos", id));
-  await b.commit();
+  // O índice é gravado por último: ninguém vê o dia antes dos dados estarem prontos.
+  await gravarDoc(`idx-${col}`,
+    {dias:{mapValue:{fields:{[dia]:{mapValue:{fields:{
+      chunks:{integerValue:String(blocos.length)},total:{integerValue:String(regs.length)},bytes:{integerValue:String(bytes)},
+      por:{stringValue:por},em:{stringValue:em}}}}}}}},
+    'dias.`'+dia+'`');
+  return bytes;
 }
-// Admin: ao abrir o app, apaga as arquivadas há mais de 30 dias (0 leituras se não houver nenhuma)
-async function limparVencidas(){
-  try {
-    const corte = Date.now() - DIAS_ARQUIVO * DIA_MS;
-    const snap = await getDocs(query(TOPICOS, where("arquivadoEm", ">", 0), where("arquivadoEm", "<", corte), limit(25)));
-    if (snap.empty) return;
-    for (const d of snap.docs) await apagarTopico(d.id, (d.data().respostasCount || 0) > 0);
-    arq.carregado = false;
-    toast(`${snap.size} publicação(ões) arquivada(s) há mais de ${DIAS_ARQUIVO} dias foram apagadas.`);
-    if (visao === "arquivados") carregarArquivados(false);
-  } catch (e) { /* silencioso: tenta de novo na próxima abertura */ }
+async function lerIndice(col){
+  const t = await getToken();
+  const r = await fetch(`${baseDocs()}/${SYNC_COL}/${encodeURIComponent('idx-'+col)}`,{headers:{Authorization:'Bearer '+t}});
+  if(r.status===404) return {};
+  const j = await r.json();
+  if(!r.ok) throw new Error(j.error?.message || 'Erro ao ler o índice compartilhado');
+  const f=j.fields?.dias?.mapValue?.fields||{}, out={};
+  for(const dia in f){
+    const m=f[dia].mapValue?.fields||{};
+    out[dia]={em:m.em?.stringValue||'',por:m.por?.stringValue||'',chunks:Number(m.chunks?.integerValue||0),total:Number(m.total?.integerValue||0),bytes:Number(m.bytes?.integerValue||0)};
+  }
+  return out;
+}
+async function baixarDia(col,dia,info){
+  if(!info.chunks) return [];
+  const prefixo=`projects/${PROJECT}/databases/(default)/documents/${SYNC_COL}/`;
+  const docs=[]; for(let i=0;i<info.chunks;i++) docs.push(`${prefixo}dia-${col}-${dia}-${i}`);
+  const t = await getToken();
+  const r = await fetch(`${baseDocs()}:batchGet`,{method:'POST',
+    headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({documents:docs})});
+  const j = await r.json();
+  if(!r.ok) throw new Error((Array.isArray(j)?j[0]?.error?.message:j.error?.message) || 'Erro ao ler dados compartilhados');
+  const partes=[];
+  (j||[]).forEach(x=>{ if(x.found){ partes[+x.found.name.split('-').pop()]=JSON.parse(x.found.fields.json.stringValue); } });
+  for(let i=0;i<info.chunks;i++) if(!partes[i]) throw new Error(`Dados compartilhados do dia ${dia} incompletos. Tente sincronizar de novo.`);
+  return partes.flat();
+}
+async function sincronizar(manual,mes){
+  if(!token) return;
+  if(trab && !mes){ if(manual) $('sinc').textContent='Aguarde: há outra operação em andamento.'; return; }
+  while(trab) await new Promise(r=>setTimeout(r,200));
+  const col=$('colecao').value;
+  trab=true; $('colecao').disabled=true; $('fMes').disabled=true; ultSync=Date.now();
+  const hora=new Date().toLocaleTimeString('pt-BR');
+  try{
+    const idx=await lerIndice(col);           // 1 leitura: só o índice dos dias compartilhados
+    indiceRemoto=idx;
+    const desatual=d=>!syncLocal[d] || String(syncLocal[d].em)<String(idx[d].em);
+    // Baixa os dias do mês escolhido + atualiza dias que já estão aqui mas foram rebuscados por outro usuário.
+    const pend=Object.keys(idx).filter(d=>desatual(d) && ((mes&&d.startsWith(mes)) || diasBuscados.has(d))).sort();
+    for(const dia of pend){
+      $('sinc').textContent=`Baixando ${dia.split('-').reverse().join('/')} (${pend.indexOf(dia)+1}/${pend.length})…`;
+      const regs=await baixarDia(col,dia,idx[dia]);
+      dados=dados.filter(o=>o._dataReferenciaImportacao!==dia).concat(regs.filter(temDescricao));
+      diasBuscados.add(dia); syncLocal[dia]={em:idx[dia].em,por:idx[dia].por};
+    }
+    if(pend.length) await cacheGravar(col,dados,diasBuscados,syncLocal);
+    renderCal();
+    if(pend.length){ montarFiltros(); aplicar(); } else opcoesMes();
+    if(mes){
+      const rot=`${mes.slice(5)}/${mes.slice(0,4)}`;
+      const temAlgo=Object.keys(idx).some(d=>d.startsWith(mes)) || dados.some(o=>String(o._dataReferenciaImportacao||'').startsWith(mes));
+      $('sinc').textContent = pend.length ? `Mês ${rot}: ${pend.length} dia(s) baixado(s) do que outros usuários compartilharam (${hora}).`
+        : temAlgo ? `Mês ${rot}: tudo já estava atualizado (${hora}).`
+        : `Mês ${rot}: nenhum dia foi compartilhado ainda. Busque os dias que faltam pela data.`;
+    }else{
+      $('sinc').textContent = `Sincronizado às ${hora}.`+(pend.length?` ${pend.length} dia(s) atualizado(s).`:'');
+    }
+  }catch(e){ console.error(e); $('sinc').textContent='Sincronização: '+traduzirErro(e.message); }
+  finally{ trab=false; $('colecao').disabled=false; $('fMes').disabled=false; }
+}
+function tituloDia(s){
+  const i=syncLocal[s]||indiceRemoto[s];
+  if(!diasBuscados.has(s) && !indiceRemoto[s]) return 'Ainda não buscado';
+  const quem=i&&i.por?`Buscado por ${i.por} em ${new Date(i.em).toLocaleString('pt-BR')}`:'Já buscado';
+  return diasBuscados.has(s) ? quem : quem+' (escolha o mês para carregar)';
 }
 
-/* ============ RENDER ============ */
-const IC_MSG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-5.4A8 8 0 1 1 21 12z"/></svg>';
-const IC_OK  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+// ---------- UI ----------
+function fmt(v){
+  if(typeof v==='string' && /^\d{4}-\d{2}-\d{2}T/.test(v)){
+    const d=new Date(v); if(!isNaN(d)) return d.toLocaleString('pt-BR');
+  }
+  return v ?? '';
+}
+function opcoes(sel,campo,filtro){
+  const atual=$(sel).value;
+  const vals=[...new Set(dados.filter(filtro||(()=>true)).map(d=>d[campo]).filter(x=>x!==undefined&&x!==''))].sort();
+  $(sel).innerHTML='<option value="">Todos</option>'+vals.map(v=>`<option>${esc(v)}</option>`).join('');
+  if(vals.map(String).includes(atual)) $(sel).value=atual;
+}
+const NOMES_MES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+function opcoesMes(){
+  const atual=$('fMes').value;
+  const ms=[...new Set([...dados.map(d=>String(d._dataReferenciaImportacao||'').slice(0,7)),...Object.keys(indiceRemoto).map(d=>d.slice(0,7))].filter(x=>/^\d{4}-\d{2}$/.test(x)))].sort().reverse();
+  $('fMes').innerHTML='<option value="">Todos</option>'+ms.map(m=>`<option value="${m}">${NOMES_MES[+m.slice(5)-1]}/${m.slice(0,4)}</option>`).join('');
+  if(ms.includes(atual)) $('fMes').value=atual;
+}
+// A lista de datas mostra só os dias do mês escolhido.
+function opcoesData(){
+  const mes=$('fMes').value;
+  opcoes('fData','_dataReferenciaImportacao',d=>!mes||String(d._dataReferenciaImportacao||'').startsWith(mes));
+}
+function montarFiltros(){
+  opcoesMes(); opcoesData(); opcoes('fServ',CAMPO_DESC);
+  opcoes('fCid','Cidade'); opcoes('fRec','Recurso');
+  const pref=['Data','Recurso','Ordem de Serviço',CAMPO_DESC,'Cidade','Hidrômetro','Status da Atividade','Fim do SLA'];
+  const todas=new Set(); dados.forEach(d=>Object.keys(d).forEach(k=>todas.add(k)));
+  todas.delete('_id');
+  colunas=[...pref.filter(c=>todas.has(c)),...[...todas].filter(c=>!pref.includes(c)).sort()];
+}
+function aplicar(){
+  const q=$('busca').value.trim().toLowerCase();
+  const mes=$('fMes').value;
+  const f={_dataReferenciaImportacao:$('fData').value,[CAMPO_DESC]:$('fServ').value,Cidade:$('fCid').value,Recurso:$('fRec').value};
+  filtrado=dados.filter(d=>{
+    if(mes && !String(d._dataReferenciaImportacao||'').startsWith(mes)) return false;
+    for(const k in f) if(f[k] && String(d[k])!==f[k]) return false;
+    if(q && !colunas.some(c=>String(d[c]??'').toLowerCase().includes(q))) return false;
+    return true;
+  });
+  if(ordem.col){
+    const c=ordem.col;
+    filtrado.sort((a,b)=>{
+      const x=a[c]??'',y=b[c]??'';
+      const r=(typeof x==='number'&&typeof y==='number')?x-y:String(x).localeCompare(String(y),'pt-BR',{numeric:true});
+      return ordem.asc?r:-r;
+    });
+  }
+  pagina=0; render();
+}
+function contar(campo,lista){
+  const m={}; lista.forEach(d=>{const k=String(d[campo]).trim(); m[k]=(m[k]||0)+1;}); return m;
+}
+function desenharBarras(idEl,campo,lista){
+  const cont=contar(campo,lista);
+  const top=Object.entries(cont).sort((a,b)=>b[1]-a[1]);
+  const max=top[0]?.[1]||1;
+  $(idEl).innerHTML=top.map(([k,n])=>`<div><span class="nome">${esc(k===''||k==='undefined'?'(vazio)':k)}</span><span class="trilho"><i style="width:${n/max*100}%"></i></span><span>${n}</span></div>`).join('');
+}
 
-function ordenar(a){ return a.slice().sort((x, y) => (x.urgenciaNivel - y.urgenciaNivel) || (y.criadoEm - x.criadoEm)); }
-
+// ---------- Calendário dos dias já buscados ----------
+const pad=n=>String(n).padStart(2,'0');
+const isoLocal=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+function renderCal(){
+  const y=calMes.getFullYear(), m=calMes.getMonth();
+  const titulo=new Date(y,m,1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+  const primeiro=new Date(y,m,1).getDay(), total=new Date(y,m+1,0).getDate();
+  const hoje=isoLocal(new Date()), sel=$('dataBuscar').value;
+  let h=`<div class="calh"><button class="sec" type="button" data-nav="-1">‹</button><b>${titulo}</b><button class="sec" type="button" data-nav="1">›</button></div><div class="calg">`;
+  ['D','S','T','Q','Q','S','S'].forEach(s=>h+=`<span class="sem">${s}</span>`);
+  for(let i=0;i<primeiro;i++) h+='<span></span>';
+  for(let d=1;d<=total;d++){
+    const s=`${y}-${pad(m+1)}-${pad(d)}`;
+    const cls=['dia',(diasBuscados.has(s)||indiceRemoto[s])?'ok':'',s===hoje?'hoje':'',s===sel?'sel':''].join(' ');
+    h+=`<button type="button" class="${cls}" data-d="${s}" title="${esc(tituloDia(s))}">${d}</button>`;
+  }
+  h+='</div><div class="leg"><i></i> dia já buscado por você ou por outro usuário (clique para escolher a data)</div>';
+  $('cal').innerHTML=h;
+}
 function render(){
-  if (!user || !acesso) return;
-  if (visao === "usuarios" && !isAdmin) visao = "todos";
-  $("#u-nome").textContent = nomeDe(user);
-  $("#u-admin").classList.toggle("oculto", !isAdmin);
+  desenharBarras('bars',CAMPO_DESC,filtrado);
+  desenharBarras('barsRec','Recurso',filtrado);
+  desenharBarras('barsCid','Cidade',filtrado);
+  const cids=new Set(filtrado.map(d=>d.Cidade)).size;
+  const recs=new Set(filtrado.map(d=>d.Recurso)).size;
+  $('kpis').innerHTML=
+    `<div class="kpi"><b>${filtrado.length}</b><span>registros filtrados</span></div>
+     <div class="kpi"><b>${dados.length}</b><span>total no cache</span></div>
+     <div class="kpi"><b>${recs}</b><span>recursos</span></div>
+     <div class="kpi"><b>${cids}</b><span>cidades</span></div>`;
+  $('thead').innerHTML='<tr>'+colunas.map(c=>`<th data-c="${esc(c)}">${esc(c)}${ordem.col===c?(ordem.asc?' ▲':' ▼'):''}</th>`).join('')+'</tr>';
+  const ini=pagina*POR_PAG, fatia=filtrado.slice(ini,ini+POR_PAG);
+  $('tbody').innerHTML=fatia.map(d=>'<tr>'+colunas.map(c=>`<td>${esc(fmt(d[c]))}</td>`).join('')+'</tr>').join('');
+  const tp=Math.max(1,Math.ceil(filtrado.length/POR_PAG));
+  $('pinfo').textContent=`Página ${pagina+1} de ${tp}`;
+  $('prev').disabled=pagina===0; $('next').disabled=pagina>=tp-1;
+}
+function exportarXLSX(){
+  if(!filtrado.length){ $('msg').textContent='Nada para exportar.'; return; }
+  const aoa=[colunas,...filtrado.map(d=>colunas.map(c=>fmt(d[c])))];
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols']=colunas.map(c=>({wch:Math.min(60,Math.max(c.length+2,...filtrado.slice(0,200).map(d=>String(fmt(d[c])).length+2)))}));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Dados');
+  XLSX.writeFile(wb,`${$('colecao').value}_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
 
-  const abertas = ativos.filter(t => t.status !== "pendente");   // as aguardando aprovação só aparecem na aba própria
-  const pend = ativos.length - abertas.length;
-  const novosUsu = usuarios.filter(u => u.status === "pendente").length;
-  const itemMenu = (id, rotulo, n, extra = "") => {
-    const alerta = (id === "pendentes" && pend && isAdmin) || (id === "usuarios" && n);
-    return `<button class="item ${visao === id ? "ativo" : ""}" data-act="visao" data-v="${id}">${extra}${rotulo}${n != null ? `<span class="n ${alerta ? "alerta" : ""}">${n}</span>` : ""}</button>`;
-  };
-  $("#menu").innerHTML =
-    itemMenu("todos", "Todas as publicações", abertas.length) +
-    itemMenu("pendentes", "Aguardando aprovação", pend) +
-    (isAdmin ? itemMenu("usuarios", "Novos usuários", novosUsu) : "") +
-    itemMenu("arquivados", "Arquivadas", null) +
-    "<hr>" +
-    Object.entries(URG).map(([k, u]) => itemMenu("u:" + k, u.l, abertas.filter(t => t.urgencia === k).length, `<span class="ponto" style="background:${u.cor}"></span>`)).join("");
+// Mostra na tela o que estiver no cache da coleção selecionada.
+async function mostrarCache(){
+  const col=$('colecao').value;
+  const c=await cacheLer(col);
+  dados=((c&&c.registros)||[]).filter(temDescricao);
+  // Dias buscados = os registrados no cache + os que aparecem nos dados.
+  indiceRemoto={};
+  syncLocal=(c&&c.sync)||{};
+  diasBuscados=new Set([...((c&&c.diasBuscados)||[]),...dados.map(o=>o._dataReferenciaImportacao).filter(Boolean)]);
+  renderCal();
+  montarFiltros(); aplicar();
+  $('msg').classList.remove('err');
+  $('msg').textContent=c
+    ? `${dados.length} registros do cache (atualizado em ${new Date(c.atualizadoEm).toLocaleString('pt-BR')}).`
+    : 'Cache vazio. Use "Buscar no Firebase" para carregar dados.';
+}
 
-  let h = "";
-  if (isAdmin && novosUsu && visao !== "usuarios")
-    h += `<div class="banner"><span><b>${novosUsu}</b> ${novosUsu === 1 ? "novo usuário aguarda" : "novos usuários aguardam"} sua aprovação.</span><button class="btn prim" data-act="visao" data-v="usuarios">Ver</button></div>`;
-
-  /* ----- tela de novos usuários (admin) ----- */
-  if (visao === "usuarios") {
-    h += `<div class="barra"><h2>Novos usuários</h2><span class="sub">Aprove ou recuse quem pediu acesso</span></div>`;
-    h += usuarios.length
-      ? `<ul class="lista">${usuarios.map(linhaUsuario).join("")}</ul>`
-      : `<div class="vazio"><strong>Nenhum pedido de acesso</strong>Quando alguém criar uma conta, ela aparece aqui.</div>`;
-    $("#principal").innerHTML = h;
-    return;
+// ---------- Armazenamento do Firebase (estimativa) + apagar mês (só admin) ----------
+// Atenção: esconder o card é só visual. Quem bloqueia de verdade são as regras do Firestore.
+const ehAdmin=()=>!!emailLogado&&ADMINS.includes(emailLogado);
+// O Firestore não informa o espaço total usado a quem acessa pelo navegador.
+// Por isso o valor é ESTIMADO: nº de documentos x tamanho médio x fator (os
+// índices também ocupam espaço). Use o botão ⚙ para calibrar o fator com o
+// número real que aparece no console do Firebase (Firestore > Uso).
+const COLS_ORIG=['atividades_corte_religacao','camel_fiscalizacao_sul'];
+let limiteBytes=1073741824, fatorUso=2, ultBruto=0, usando=false;
+try{
+  const l=+localStorage.getItem('igua_limite_bytes'), f=+localStorage.getItem('igua_fator_uso');
+  if(l>0) limiteBytes=l; if(f>0) fatorUso=f;
+}catch(e){}
+const mediaDoc={};
+function fmtBytes(b){
+  if(b<1048576) return (b/1024).toFixed(0)+' KB';
+  if(b<1073741824) return (b/1048576).toFixed(1)+' MB';
+  return (b/1073741824).toFixed(2)+' GB';
+}
+async function postar(url,corpo){
+  const t=await getToken();
+  const r=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify(corpo)});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error((Array.isArray(j)?j[0]?.error?.message:j.error?.message) || 'Erro ao falar com o Firestore');
+  return j;
+}
+function filtroMes(mes,prox){
+  return {compositeFilter:{op:'AND',filters:[
+    {fieldFilter:{field:{fieldPath:'_dataReferenciaImportacao'},op:'GREATER_THAN_OR_EQUAL',value:{stringValue:mes+'-01'}}},
+    {fieldFilter:{field:{fieldPath:'_dataReferenciaImportacao'},op:'LESS_THAN',value:{stringValue:prox}}}]}};
+}
+function proxMes(mes){
+  const [y,m]=mes.split('-').map(Number);
+  return m===12?`${y+1}-01-01`:`${y}-${pad(m+1)}-01`;
+}
+async function contarDocs(col,where){
+  const sq={from:[{collectionId:col}]}; if(where) sq.where=where;
+  const j=await postar(`${baseDocs()}:runAggregationQuery`,{structuredAggregationQuery:{structuredQuery:sq,aggregations:[{alias:'n',count:{}}]}});
+  return Number(j[0]?.result?.aggregateFields?.n?.integerValue||0);
+}
+// Tamanho médio de um documento: usa o cache local; sem cache, lê uma amostra de 20.
+async function mediaDocumento(col){
+  if(mediaDoc[col]) return mediaDoc[col];
+  let amostra=[];
+  const c=await cacheLer(col);
+  if(c&&c.registros&&c.registros.length) amostra=c.registros.slice(0,300);
+  else{
+    const t=await getToken();
+    const r=await fetch(`${baseDocs()}/${col}?pageSize=20`,{headers:{Authorization:'Bearer '+t}});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(j.error?.message||'Erro ao ler amostra do Firestore');
+    amostra=(j.documents||[]).map(docParaObjeto);
   }
-
-  const q = termo.trim().toLowerCase();
-  let itens, titulo, sub = "", vazio;
-  if (visao === "arquivados") {
-    itens = arq.itens; titulo = "Arquivadas"; sub = `Apagadas automaticamente após ${DIAS_ARQUIVO} dias`;
-    vazio = arq.carregado ? "Nada arquivado ainda." : "";
-  } else {
-    itens = abertas;
-    if (visao === "pendentes") { itens = ativos.filter(t => t.status === "pendente"); titulo = "Aguardando aprovação"; sub = isAdmin ? "Abra uma publicação para aprovar ou recusar" : "Confirmadas como concluídas, esperando o admin"; vazio = "Nenhuma publicação aguardando aprovação."; }
-    else if (visao.startsWith("u:")) { const k = visao.slice(2); itens = itens.filter(t => t.urgencia === k); titulo = `Urgência ${URG[k].l.toLowerCase()}`; vazio = "Nenhuma publicação com essa urgência."; }
-    else { titulo = "Todas as publicações"; sub = "Da mais urgente para a menos urgente"; vazio = "Nenhuma publicação aberta. Que tal criar a primeira?"; }
-    itens = ordenar(itens);
+  if(!amostra.length) return 0;
+  const m=amostra.reduce((s,o)=>s+JSON.stringify(o).length+100,0)/amostra.length;
+  mediaDoc[col]=m; return m;
+}
+async function atualizarUso(){
+  if(!token||usando||!ehAdmin()) return;
+  usando=true; $('usoBtn').disabled=true; $('usoTxt').textContent='Calculando…';
+  try{
+    let orig=0, sync=0;
+    for(const col of COLS_ORIG){
+      const n=await contarDocs(col), m=await mediaDocumento(col);
+      orig+=n*m;
+      const idx=await lerIndice(col);
+      for(const d in idx) sync+=idx[d].bytes||(idx[d].total*m);
+    }
+    ultBruto=orig+sync;
+    const total=ultBruto*fatorUso, pct=total/limiteBytes*100;
+    $('usoFill').style.width=Math.min(100,pct).toFixed(1)+'%';
+    $('usoFill').className=pct>=90?'alto':pct>=70?'mid':'';
+    $('usoTxt').textContent=`≈ ${fmtBytes(total)} de ${fmtBytes(limiteBytes)} (${pct.toFixed(1)}%) · dados originais ≈ ${fmtBytes(orig*fatorUso)} · cópia compartilhada ≈ ${fmtBytes(sync*fatorUso)} · estimativa (confira no console do Firebase e calibre em ⚙)`;
+  }catch(e){
+    console.error(e); $('usoFill').style.width='0'; $('usoTxt').textContent='Não foi possível estimar o espaço: '+traduzirErro(e.message);
   }
-  if (q) itens = itens.filter(t => (t.titulo + " " + t.descricao + " " + t.autorNome).toLowerCase().includes(q));
-
-  h += `<div class="barra"><h2>${titulo}</h2><span class="sub">${sub}</span>${visao === "arquivados" ? `<button class="btn" data-act="atualizar-arq">Atualizar</button>` : ""}</div>`;
-  if (visao === "arquivados" && arq.carregando && !arq.itens.length) h += `<div class="vazio">Carregando…</div>`;
-  else if (!itens.length) h += `<div class="vazio"><strong>${q ? "Nada encontrado" : "Sem publicações"}</strong>${q ? "Tente outro termo." : vazio}</div>`;
-  else h += `<ul class="lista">${itens.map(linha).join("")}</ul>`;
-  if (visao === "arquivados" && arq.carregado && !arq.fim) h += `<div style="text-align:center;margin-top:14px"><button class="btn" data-act="mais-arq" ${arq.carregando ? "disabled" : ""}>${arq.carregando ? "Carregando…" : "Carregar mais"}</button></div>`;
-  $("#principal").innerHTML = h;
+  finally{ usando=false; $('usoBtn').disabled=false; }
 }
-
-function linhaUsuario(u){
-  const recusado = u.status === "recusado";
-  return `<li class="topico sem-clique">
-    ${avatar(u.nome, u.id)}
-    <div class="info"><div class="tit">${esc(u.nome || "Sem nome")}</div><div class="meta">${esc(u.email)} · pediu acesso ${ago(u.criadoEm)}</div></div>
-    <div class="lado">
-      ${recusado ? `<span class="badge rec">Recusado</span>` : ""}
-      <button class="btn ok peq" data-act="usr-ok" data-id="${u.id}">Aprovar</button>
-      ${recusado ? "" : `<button class="btn perigo peq" data-act="usr-no" data-id="${u.id}">Recusar</button>`}
-    </div>
-  </li>`;
+function ajustarUso(){
+  const l=prompt('Limite de armazenamento em GB (plano gratuito = 1):',String(+(limiteBytes/1073741824).toFixed(2)));
+  if(l===null) return;
+  const gb=parseFloat(String(l).replace(',','.'));
+  if(gb>0) limiteBytes=gb*1073741824;
+  const r=prompt(`Calibrar (opcional): quantos MB de armazenamento o console do Firebase mostra agora? Deixe vazio para manter o fator atual (${fatorUso.toFixed(2)}).`,'');
+  const real=parseFloat(String(r||'').replace(',','.'));
+  if(real>0 && ultBruto>0) fatorUso=real*1048576/ultBruto;
+  try{ localStorage.setItem('igua_limite_bytes',String(limiteBytes)); localStorage.setItem('igua_fator_uso',String(fatorUso)); }catch(e){}
+  atualizarUso();
 }
-
-function linha(t){
-  const arquivado = !!t.arquivadoEm;
-  const quando = arquivado
-    ? `Arquivada ${ago(t.arquivadoEm)} · será apagada ${txtDias(diasRestantes(t.arquivadoEm))}`
-    : `${esc(t.autorNome)} abriu ${ago(t.criadoEm)}`;
-  const nConf = (t.confirmacoes || []).length;
-  return `<li class="topico" tabindex="0" data-act="abrir" data-id="${t.id}" data-src="${arquivado ? "arq" : "ativo"}">
-    ${avatar(t.autorNome, t.autorUid)}
-    <div class="info"><div class="tit">${esc(t.titulo)}</div><div class="meta">${quando}</div></div>
-    <div class="lado">
-      ${t.status === "pendente" ? `<span class="badge pend">Aguardando aprovação</span>` : ""}
-      ${arquivado ? `<span class="badge arq">Arquivada</span>` : ""}
-      <span class="badge ${t.urgencia}">${URG[t.urgencia]?.l || ""}</span>
-      <span class="cont ${nConf ? "verde" : ""}" title="Confirmações de conclusão">${IC_OK}${nConf}</span>
-      <span class="cont" title="Respostas">${IC_MSG}${t.respostasCount || 0}</span>
-    </div>
-  </li>`;
+async function excluirDocs(nomes){
+  for(let i=0;i<nomes.length;i+=400)
+    await postar(`${baseDocs()}:commit`,{writes:nomes.slice(i,i+400).map(n=>({delete:n}))});
 }
-
-/* ============ MODAL DA PUBLICAÇÃO ============ */
-function topicoAtual(){ return cur && (cur.src === "arq" ? arq.itens : ativos).find(t => t.id === cur.id); }
-
-function renderModal(){
-  const t = topicoAtual(); if (!t) return;
-  const salvo = $("#r-texto")?.value || "";
-  const arquivado = !!t.arquivadoEm;
-  const conf = t.confirmacoes || [];
-  const euConfirmei = conf.some(c => c.uid === user.uid);
-  const souAutor = t.autorUid === user.uid;
-
-  let acoes = "";
-  if (!arquivado) {
-    if (!souAutor && !euConfirmei) acoes += `<button class="btn ok" data-act="confirmar">Confirmar que foi concluída</button>`;
-    if (isAdmin && t.status === "pendente") acoes += `<button class="btn ok" data-act="aprovar">Aprovar e arquivar</button><button class="btn" data-act="recusar">Recusar</button>`;
-    if (isAdmin && t.status === "aberto") acoes += `<button class="btn" data-act="aprovar">Arquivar</button>`;
-    if (souAutor) acoes += `<button class="btn" data-act="editar">Editar</button>`;
+// Tira os dias do índice compartilhado (a máscara sem valor apaga o campo).
+async function removerDoIndice(col,dias){
+  if(!dias.length) return;
+  const t=await getToken();
+  const mask=dias.map(d=>'updateMask.fieldPaths='+encodeURIComponent('dias.`'+d+'`')).join('&');
+  const r=await fetch(`${baseDocs()}/${SYNC_COL}/${encodeURIComponent('idx-'+col)}?${mask}`,
+    {method:'PATCH',headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({fields:{}})});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.error?.message||'Erro ao atualizar o índice compartilhado');
+}
+async function apagarOriginais(col,mes,prox,progresso){
+  let total=0;
+  for(;;){
+    const j=await postar(`${baseDocs()}:runQuery`,{structuredQuery:{
+      from:[{collectionId:col}],select:{fields:[{fieldPath:'__name__'}]},where:filtroMes(mes,prox),limit:500}});
+    const nomes=(j||[]).filter(x=>x.document).map(x=>x.document.name);
+    if(!nomes.length) break;
+    await excluirDocs(nomes); total+=nomes.length; progresso(total);
+    if(nomes.length<500) break;
   }
-  if (isAdmin || souAutor) acoes += `<button class="btn perigo" data-act="excluir">Excluir</button>`;
-
-  let aviso = "";
-  if (!arquivado && euConfirmei) aviso = `<div class="aviso neutro">Você confirmou a conclusão. ${t.status === "pendente" ? "Agora é só aguardar o admin." : ""}</div>`;
-  else if (!arquivado && souAutor) aviso = `<div class="aviso neutro">Outros usuários podem confirmar a conclusão desta publicação.</div>`;
-  if (t.status === "pendente") aviso += `<div class="aviso">Confirmada por ${conf.map(c => esc(c.nome)).join(", ")}. ${isAdmin ? "Aprove para arquivar ou recuse para voltar a aberta." : "Aguardando aprovação do admin."}</div>`;
-  if (arquivado) aviso = `<div class="aviso neutro">Arquivada por ${esc(t.arquivadoPor || "admin")} ${ago(t.arquivadoEm)}. Será apagada ${txtDias(diasRestantes(t.arquivadoEm))}.</div>`;
-
-  $("#m-topico-box").innerHTML = `
-    <div class="topo"><h3 id="mt-tit">${esc(t.titulo)}</h3><button class="fechar" data-act="fechar" aria-label="Fechar">×</button></div>
-    <div class="corpo-m">
-      <div class="quem">${avatar(t.autorNome, t.autorUid, true)}<span><b>${esc(t.autorNome)}</b> publicou ${ago(t.criadoEm)}${t.editadoEm ? " · editada" : ""}</span>
-        <span class="badge ${t.urgencia}" style="margin-left:auto">Urgência ${URG[t.urgencia]?.l.toLowerCase()}</span></div>
-      <div class="desc">${esc(t.descricao)}</div>
-      ${aviso}
-      <div class="acoes">${acoes}</div>
-      <div class="resp-tit">Respostas (${t.respostasCount || 0})</div>
-      <div id="resp-lista">${respostasCarregando ? `<div class="vazio" style="padding:20px">Carregando…</div>` : respostas.map(respHtml).join("")}</div>
-      ${arquivado ? "" : `<div class="nova-resp"><label for="r-texto" class="oculto">Sua resposta</label>
-        <textarea id="r-texto" maxlength="1000" placeholder="Escreva uma resposta ou atualização…"></textarea>
-        <button class="btn prim" data-act="responder">Responder</button></div>`}
-    </div>`;
-  if (salvo && $("#r-texto")) $("#r-texto").value = salvo;
-  $("#m-topico").classList.remove("oculto");
+  return total;
 }
-function respHtml(r){
-  return `<div class="resp">${avatar(r.autorNome, r.autorUid, true)}<div><div class="nome">${esc(r.autorNome)}<span>${ago(r.criadoEm)}</span></div><div class="txt">${esc(r.texto)}</div></div></div>`;
-}
-
-async function abrirTopico(id, src){
-  cur = { id, src }; respostas = []; respostasCarregando = true;
-  renderModal();
-  const t = topicoAtual();
-  if (!t) return;
-  if (!t.respostasCount) { respostasCarregando = false; renderModal(); return; }   // 0 respostas = 0 leituras
-  try {
-    const snap = await getDocs(query(collection(db, "topicos", id, "respostas"), orderBy("criadoEm"), limit(100)));
-    respostas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  } catch (e) { toast(erroTxt(e)); }
-  respostasCarregando = false;
-  if (cur?.id === id) renderModal();
-}
-
-function fecharModais(){
-  $("#m-topico").classList.add("oculto"); $("#m-novo").classList.add("oculto");
-  cur = null; respostas = []; editId = null;
-}
-
-// Abre o formulário: sem argumento = nova publicação; com publicação = edição
-function abrirForm(t){
-  fecharModais();
-  $("#form-novo").reset();
-  editId = t ? t.id : null;
-  $("#mn-tit").textContent = t ? "Editar publicação" : "Nova publicação";
-  $("#n-enviar").textContent = t ? "Salvar" : "Publicar";
-  if (t) {
-    $("#n-titulo").value = t.titulo;
-    $("#n-desc").value = t.descricao;
-    const r = document.querySelector(`input[name="urg"][value="${t.urgencia}"]`); if (r) r.checked = true;
-  }
-  $("#n-cont").textContent = $("#n-desc").value.length;
-  $("#m-novo").classList.remove("oculto"); $("#n-titulo").focus();
-}
-
-/* ============ AÇÕES ============ */
-async function acao(nome, el){
-  const t = topicoAtual();
-  const ref = t && doc(db, "topicos", t.id);
-  try {
-    if (nome === "usr-ok" || nome === "usr-no") {
-      const ok = nome === "usr-ok";
-      await updateDoc(doc(db, "usuarios", el.dataset.id), ok ? { status: "aprovado", aprovadoEm: Date.now() } : { status: "recusado" });
-      toast(ok ? "Usuário aprovado." : "Usuário recusado.");
+async function apagarMes(){
+  const mes=$('mesApagar').value;
+  if(!token||!ehAdmin()) return;
+  if(!/^\d{4}-\d{2}$/.test(mes)){ $('msg').classList.add('err'); $('msg').textContent='Escolha o mês que deseja apagar.'; return; }
+  const col=$('colecao').value, orig=$('apagarOrig').checked;
+  const rot=`${mes.slice(5)}/${mes.slice(0,4)}`, nome=$('colecao').selectedOptions[0].textContent, prox=proxMes(mes);
+  $('apagarBtn').disabled=true; $('msg').classList.remove('err'); $('msg').textContent='Conferindo o que será apagado…';
+  try{
+    const idx=await lerIndice(col);
+    const dias=Object.keys(idx).filter(d=>d.startsWith(mes));
+    const nOrig=orig?await contarDocs(col,filtroMes(mes,prox)):0;
+    if(!dias.length && !nOrig){
+      $('msg').textContent=orig?`Não há dados de ${rot} em "${nome}".`:`Não há cópia compartilhada de ${rot}. Marque a opção dos dados originais para apagar do Firebase.`;
       return;
     }
-    if (!t) return;
-    if (nome === "confirmar") {
-      await updateDoc(ref, { confirmacoes: arrayUnion({ uid: user.uid, nome: nomeDe(user), em: Date.now() }), status: "pendente" });
-      toast("Confirmação enviada para o admin.");
-    }
-    else if (nome === "editar") abrirForm(t);
-    else if (nome === "aprovar") {
-      await updateDoc(ref, { status: "arquivado", arquivadoEm: Date.now(), arquivadoPor: nomeDe(user) });
-      arq.carregado = false; toast("Publicação arquivada.");
-    }
-    else if (nome === "recusar") {
-      await updateDoc(ref, { status: "aberto", confirmacoes: [] });
-      toast("Recusado. A publicação voltou para aberta.");
-    }
-    else if (nome === "excluir") {
-      if (!confirm("Excluir esta publicação de vez? Essa ação não pode ser desfeita.")) return;
-      const era = cur.src;
-      await apagarTopico(t.id, (t.respostasCount || 0) > 0);
-      if (era === "arq") { arq.itens = arq.itens.filter(x => x.id !== t.id); fecharModais(); render(); }
-      toast("Publicação excluída.");
-    }
-    else if (nome === "responder") {
-      const txt = $("#r-texto").value.trim(); if (!txt) return;
-      el.disabled = true;
-      const novo = { texto: txt, autorUid: user.uid, autorNome: nomeDe(user), criadoEm: Date.now() };
-      const nref = doc(collection(db, "topicos", t.id, "respostas"));
-      const b = writeBatch(db);
-      b.set(nref, novo);
-      b.update(ref, { respostasCount: increment(1) });
-      await b.commit();
-      respostas.push({ id: nref.id, ...novo });
-      $("#r-texto").value = "";
-      renderModal();
-    }
-    // quando o admin arquiva, o listener remove a publicação e fecha o modal sozinho
-  } catch (e) { toast(erroTxt(e)); if (el) el.disabled = false; }
+    let txt=`Apagar ${rot} de "${nome}"?\n\n• Cópia compartilhada: ${dias.length} dia(s)`;
+    txt+=orig?`\n• Dados ORIGINAIS no Firebase: ${nOrig} documento(s) — NÃO dá para desfazer`
+             :`\n(Os dados originais não serão apagados; o mês poderá ser buscado de novo.)`;
+    txt+=`\n\nTambém sai do cache deste navegador. Digite ${rot} para confirmar:`;
+    if(prompt(txt)!==rot){ $('msg').textContent='Cancelado. Nada foi apagado.'; return; }
+    while(trab) await new Promise(r=>setTimeout(r,200));
+    trab=true; $('colecao').disabled=true; $('fMes').disabled=true;
+    try{
+      // Primeiro some do índice (ninguém vê o dia sem dados), depois apaga os blocos.
+      $('msg').textContent='Apagando a cópia compartilhada…';
+      await removerDoIndice(col,dias);
+      const prefixo=`projects/${PROJECT}/databases/(default)/documents/${SYNC_COL}/`, blocos=[];
+      dias.forEach(d=>{ for(let i=0;i<idx[d].chunks;i++) blocos.push(`${prefixo}dia-${col}-${d}-${i}`); });
+      await excluirDocs(blocos);
+      let apagados=0;
+      if(orig) apagados=await apagarOriginais(col,mes,prox,n=>{ $('msg').textContent=`Apagando dados originais… ${n} de ${nOrig}`; });
+      // Limpa também o cache e a tela deste navegador.
+      const no=d=>String(d||'').startsWith(mes);
+      dados=dados.filter(o=>!no(o._dataReferenciaImportacao));
+      [...diasBuscados].filter(no).forEach(d=>diasBuscados.delete(d));
+      Object.keys(syncLocal).filter(no).forEach(d=>delete syncLocal[d]);
+      Object.keys(indiceRemoto).filter(no).forEach(d=>delete indiceRemoto[d]);
+      await cacheGravar(col,dados,diasBuscados,syncLocal);
+      if($('fMes').value===mes) $('fMes').value='';
+      renderCal(); montarFiltros(); aplicar();
+      $('msg').textContent=`${rot} apagado: ${dias.length} dia(s) da cópia compartilhada`+(orig?` e ${apagados} documento(s) originais`:'')+'. Os outros usuários podem manter esse mês no cache deles até limparem.';
+      atualizarUso();
+    }finally{ trab=false; $('colecao').disabled=false; $('fMes').disabled=false; }
+  }catch(e){ console.error(e); $('msg').classList.add('err'); $('msg').textContent='Não foi possível apagar: '+traduzirErro(e.message)+' (o que já foi apagado não volta; rode de novo para continuar).'; }
+  finally{ $('apagarBtn').disabled=false; }
 }
 
-/* ============ EVENTOS ============ */
-document.addEventListener("click", e => {
-  const el = e.target.closest("[data-act]");
-  if (el) {
-    const a = el.dataset.act;
-    if (a === "visao") { visao = el.dataset.v; render(); if (visao === "arquivados" && !arq.carregado) carregarArquivados(false); }
-    else if (a === "abrir") abrirTopico(el.dataset.id, el.dataset.src);
-    else if (a === "novo") abrirForm(null);
-    else if (a === "fechar") fecharModais();
-    else if (a === "sair") signOut(auth);
-    else if (a === "mais-arq") carregarArquivados(true);
-    else if (a === "atualizar-arq") carregarArquivados(false);
-    else acao(a, el);
-    return;
+// ---------- Eventos ----------
+$('entrar').onclick=async()=>{
+  $('lmsg').textContent='Entrando…'; $('entrar').disabled=true;
+  try{
+    if(!API_KEY||!PROJECT||/^COLE_/.test(API_KEY)||/^COLE_/.test(PROJECT)) throw new Error('Configuração ausente: preencha apiKey e project no bloco "cfg" do HTML.');
+    await login($('email').value.trim(),$('senha').value);
+    try{
+      localStorage.setItem('igua_email',$('email').value.trim());
+    }catch(e){}
+    $('login').classList.add('hide'); $('app').classList.remove('hide');
+    $('sair').classList.remove('hide'); $('user').textContent=$('email').value.trim();
+    if(ehAdmin()) $('uso').classList.remove('hide');
+    await mostrarCache();
+    sincronizar();
+    atualizarUso();
+  }catch(e){console.error(e);$('lmsg').textContent=traduzirErro(e.message);}
+  $('entrar').disabled=false;
+};
+window.addEventListener('error',e=>{ const m=$('lmsg'); if(m&&!$('login').classList.contains('hide')) m.textContent='Erro no painel: '+(e.message||'desconhecido'); });
+window.addEventListener('unhandledrejection',e=>{ const m=$('lmsg'); if(m&&!$('login').classList.contains('hide')) m.textContent='Erro: '+traduzirErro(String((e.reason&&e.reason.message)||e.reason||'')); });
+$('senha').onkeydown=e=>{if(e.key==='Enter')$('entrar').click();};
+$('sair').onclick=()=>location.reload();
+$('colecao').onchange=async()=>{ await mostrarCache(); sincronizar(); };
+$('carregar').onclick=async()=>{
+  const dia0=$('dataBuscar').value;
+  if(!dia0){ $('msg').textContent='Escolha uma data para buscar.'; $('msg').classList.add('err'); return; }
+  if(diasBuscados.has(dia0)||indiceRemoto[dia0]){
+    const i=syncLocal[dia0]||indiceRemoto[dia0], quem=i&&i.por?` por ${i.por}`:'';
+    if(!confirm(`O dia ${dia0.split('-').reverse().join('/')} já foi buscado${quem}. Buscar de novo (gasta leituras do Firebase)?`)) return;
   }
-  if (e.target.classList.contains("fundo-modal")) fecharModais();
-});
-document.addEventListener("keydown", e => {
-  if (e.key === "Escape") fecharModais();
-  if ((e.key === "Enter" || e.key === " ") && e.target.classList?.contains("topico") && e.target.tabIndex >= 0) { e.preventDefault(); e.target.click(); }
-});
-$("#busca").addEventListener("input", e => { termo = e.target.value; render(); });
-$("#n-desc").addEventListener("input", e => $("#n-cont").textContent = e.target.value.length);
-
-$("#form-novo").addEventListener("submit", async e => {
-  e.preventDefault();
-  const btn = $("#n-enviar"); btn.disabled = true;
-  const urgencia = document.querySelector('input[name="urg"]:checked').value;
-  const dados = {
-    titulo: $("#n-titulo").value.trim(),
-    descricao: $("#n-desc").value.trim(),
-    urgencia, urgenciaNivel: URG[urgencia].n
-  };
-  try {
-    if (editId) {
-      await updateDoc(doc(db, "topicos", editId), { ...dados, editadoEm: Date.now() });
-      fecharModais(); toast("Publicação atualizada.");
-    } else {
-      await addDoc(TOPICOS, {
-        ...dados,
-        status: "aberto",
-        autorUid: user.uid, autorNome: nomeDe(user),
-        criadoEm: Date.now(),
-        respostasCount: 0, confirmacoes: []
-      });
-      fecharModais(); visao = "todos"; render(); toast("Publicação criada.");
-    }
-  } catch (err) { toast(erroTxt(err)); }
-  btn.disabled = false;
-});
-
-/* ============ LOGIN E APROVAÇÃO DE CADASTRO ============ */
-let modoCadastro = false;
-function modoLogin(cad){
-  modoCadastro = cad;
-  $("#login-titulo").textContent = cad ? "Criar conta" : "Entrar";
-  $("#campo-nome").classList.toggle("oculto", !cad);
-  $("#l-nome").required = cad;
-  $("#l-enviar").textContent = cad ? "Criar conta" : "Entrar";
-  $("#troca-txt").textContent = cad ? "Já tem conta?" : "Ainda não tem conta?";
-  $("#troca-btn").textContent = cad ? "Entrar" : "Criar conta";
-  $("#l-senha").autocomplete = cad ? "new-password" : "current-password";
-  $("#l-erro").textContent = "";
+  $('carregar').disabled=true; $('msg').classList.remove('err');
+  while(trab) await new Promise(r=>setTimeout(r,200));
+  trab=true; $('colecao').disabled=true;
+  try{
+    const col=$('colecao').value, dia=dia0;
+    $('msg').textContent='Buscando…';
+    const novos = await carregarPorData(col,dia);
+    // Troca só os registros daquele dia (apagados no Firebase saem).
+    const c=await cacheLer(col);
+    const base=((c&&c.registros)||[]).filter(o=>o._dataReferenciaImportacao!==dia);
+    const mapa=new Map(base.map(o=>[o._id,o]));
+    novos.forEach(o=>mapa.set(o._id,o));
+    const todos=[...mapa.values()].filter(temDescricao);
+    diasBuscados.add(dia);
+    // Compartilha o dia buscado com os outros usuários (eles não precisam buscar de novo).
+    let aviso='';
+    const em=new Date().toISOString(), por=$('user').textContent;
+    try{
+      const bytes=await publicarDia(col,dia,novos,em,por);
+      syncLocal[dia]={em,por}; indiceRemoto[dia]={em,por,chunks:0,total:novos.length,bytes};
+      aviso=' Dia compartilhado com os outros usuários.';
+    }catch(e){ console.error(e); aviso=' Atenção: não foi possível compartilhar com os outros usuários ('+traduzirErro(e.message)+').'; }
+    await cacheGravar(col,todos,diasBuscados,syncLocal);
+    dados=todos;
+    renderCal();
+    montarFiltros(); aplicar();
+    $('msg').textContent=`${novos.length} registros buscados da data ${dia} às ${new Date().toLocaleTimeString('pt-BR')}. Total no cache: ${dados.length}.${aviso}`;
+    atualizarUso();
+  }catch(e){console.error(e);$('msg').textContent=traduzirErro(e.message);$('msg').classList.add('err');}
+  finally{ trab=false; $('colecao').disabled=false; $('carregar').disabled=false; }
+};
+// ---------- Buscar o mês inteiro (só os dias que ainda faltam) ----------
+const somaDia=(s,n)=>{ const d=new Date(s+'T12:00:00'); d.setDate(d.getDate()+n); return isoLocal(d); };
+const dmy=s=>s.split('-').reverse().join('/');
+async function carregarIntervalo(col,ini,fimExcl){
+  const t = await getToken();
+  const campo={fieldPath:'_dataReferenciaImportacao'};
+  const r = await fetch(`${baseDocs()}:runQuery`,{method:'POST',
+    headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'},
+    body:JSON.stringify({structuredQuery:{from:[{collectionId:col}],where:{compositeFilter:{op:'AND',filters:[
+      {fieldFilter:{field:campo,op:'GREATER_THAN_OR_EQUAL',value:{stringValue:ini}}},
+      {fieldFilter:{field:campo,op:'LESS_THAN',value:{stringValue:fimExcl}}}]}}}})});
+  const j = await r.json();
+  if(!r.ok) throw new Error((Array.isArray(j)?j[0]?.error?.message:j.error?.message) || 'Erro ao consultar o Firestore');
+  const out=[];
+  (j||[]).forEach(x=>{ if(x.document){ const o=docParaObjeto(x.document); if(temDescricao(o)) out.push(o); } });
+  return out;
 }
-$("#troca-btn").addEventListener("click", () => modoLogin(!modoCadastro));
-$("#form-login").addEventListener("submit", async e => {
-  e.preventDefault();
-  const btn = $("#l-enviar"); btn.disabled = true; $("#l-erro").textContent = "";
-  const email = $("#l-email").value.trim(), senha = $("#l-senha").value;
-  try {
-    if (modoCadastro) {
-      cadastrando = true;
-      try {
-        const nome = $("#l-nome").value.trim();
-        const cred = await createUserWithEmailAndPassword(auth, email, senha);
-        await updateProfile(cred.user, { displayName: nome });
-        // pedido de acesso: fica "pendente" até o admin aprovar
-        await setDoc(doc(db, "usuarios", cred.user.uid), { nome, email: cred.user.email || email, status: "pendente", criadoEm: Date.now() });
-      } finally { cadastrando = false; }
-    } else await signInWithEmailAndPassword(auth, email, senha);
-  } catch (err) { $("#l-erro").textContent = erroTxt(err); }
-  btn.disabled = false;
-});
-
-function mostrarEspera(status){
-  acesso = false; pararLista(); fecharModais();
-  const msg = {
-    carregando: ["Verificando acesso…", ""],
-    pendente:   ["Aguardando aprovação", "Seu cadastro foi enviado ao administrador. Assim que for aprovado, você poderá entrar no fórum. Esta tela atualiza sozinha."],
-    recusado:   ["Acesso não aprovado", "O administrador não aprovou o seu cadastro. Se isso for um engano, fale com ele."]
-  }[status] || ["Aguardando aprovação", ""];
-  $("#e-titulo").textContent = msg[0]; $("#e-texto").textContent = msg[1];
-  $("#login").classList.add("oculto"); $("#app").classList.add("oculto"); $("#espera").classList.remove("oculto");
-}
-function liberar(){
-  if (acesso) return;
-  acesso = true;
-  $("#login").classList.add("oculto"); $("#espera").classList.add("oculto"); $("#app").classList.remove("oculto");
-  render(); iniciarLista();
-  if (isAdmin) limparVencidas();
-}
-async function criarPerfil(){      // contas antigas (criadas antes da aprovação) também passam pelo admin
-  if (criandoPerfil) return; criandoPerfil = true;
-  try { await setDoc(doc(db, "usuarios", user.uid), { nome: nomeDe(user), email: user.email || "", status: "pendente", criadoEm: Date.now() }); }
-  catch (e) { toast(erroTxt(e)); }
-  criandoPerfil = false;
-}
-function observarPerfil(){
-  unsubPerfil = onSnapshot(doc(db, "usuarios", user.uid), snap => {
-    if (!snap.exists()) {
-      if (!snap.metadata.fromCache && !cadastrando) criarPerfil();
-      mostrarEspera("pendente"); return;
-    }
-    const d = snap.data();
-    isAdmin = d.admin === true;
-    if (isAdmin || d.status === "aprovado") liberar(); else mostrarEspera(d.status);
-  }, e => toast(erroTxt(e)));
-}
-function pararPerfil(){ if (unsubPerfil) { unsubPerfil(); unsubPerfil = null; } }
-
-onAuthStateChanged(auth, u => {
-  user = u;
-  document.body.classList.remove("carregando");
-  pararPerfil();
-  if (u) {
-    isAdmin = false; acesso = false;
-    mostrarEspera("carregando"); observarPerfil();   // o perfil diz se é admin ou aprovado
-  } else {
-    pararLista(); acesso = false; isAdmin = false;
-    ativos = []; usuarios = []; arq = { itens: [], ultimo: null, fim: false, carregado: false, carregando: false };
-    visao = "todos"; fecharModais();
-    $("#app").classList.add("oculto"); $("#espera").classList.add("oculto"); $("#login").classList.remove("oculto");
+// Agrupa os dias que faltam em janelas de dias seguidos (no máximo 7 por consulta).
+function janelasDeDias(dias){
+  const jan=[]; let at=[];
+  for(const s of dias){
+    if(at.length && (somaDia(at[at.length-1],1)!==s || at.length>=7)){ jan.push(at); at=[]; }
+    at.push(s);
   }
-});
+  if(at.length) jan.push(at);
+  return jan;
+}
+$('buscarMes').onclick=async()=>{
+  const ref=$('dataBuscar').value || ($('fMes').value?$('fMes').value+'-01':isoLocal(new Date()));
+  const mes=ref.slice(0,7), col=$('colecao').value, rot=`${mes.slice(5)}/${mes.slice(0,4)}`;
+  $('buscarMes').disabled=true; $('carregar').disabled=true; $('msg').classList.remove('err');
+  try{
+    $('msg').textContent=`Mês ${rot}: conferindo o que já foi buscado…`;
+    await sincronizar(true,mes);                       // 1º traz o que outros usuários já compartilharam
+    const hoje=isoLocal(new Date());
+    const total=new Date(+mes.slice(0,4),+mes.slice(5),0).getDate(), faltam=[];
+    for(let d=1;d<=total;d++){
+      const s=`${mes}-${pad(d)}`; if(s>hoje) break;
+      // Dias já buscados não são buscados de novo; só "hoje" é refeito, porque ainda pode receber registros.
+      if(s===hoje || !(diasBuscados.has(s)||indiceRemoto[s])) faltam.push(s);
+    }
+    if(!faltam.length){ $('msg').textContent=`Mês ${rot}: todos os dias já foram buscados. Nada a buscar.`; return; }
+    if(!confirm(`Buscar no Firebase ${faltam.length} dia(s) de ${rot} que ainda faltam (gasta leituras)? Os dias já buscados não serão buscados de novo.`)){ $('msg').textContent=''; return; }
+    while(trab) await new Promise(r=>setTimeout(r,200));
+    trab=true; $('colecao').disabled=true;
+    const por=$('user').textContent, jan=janelasDeDias(faltam);
+    let regs=0, falhas=0;
+    try{
+      for(let i=0;i<jan.length;i++){
+        const j=jan[i], ult=j[j.length-1];
+        $('msg').textContent=`Buscando ${dmy(j[0])}${j.length>1?' a '+dmy(ult):''} (${i+1}/${jan.length})…`;
+        const novos=await carregarIntervalo(col,j[0],somaDia(ult,1));
+        const porDia={}; j.forEach(d=>porDia[d]=[]);
+        novos.forEach(o=>{ const d=o._dataReferenciaImportacao; if(porDia[d]) porDia[d].push(o); });
+        const em=new Date().toISOString();
+        dados=dados.filter(o=>!porDia[o._dataReferenciaImportacao]).concat(novos);
+        for(const d of j){
+          // Dia sem registros só é dado como buscado se já passou; "hoje" vazio fica para a próxima busca.
+          if(!porDia[d].length && d>=hoje) continue;
+          diasBuscados.add(d);
+          try{
+            const bytes=await publicarDia(col,d,porDia[d],em,por);
+            syncLocal[d]={em,por}; indiceRemoto[d]={em,por,chunks:0,total:porDia[d].length,bytes};
+          }catch(e){ console.error(e); falhas++; }
+        }
+        regs+=novos.length;
+        await cacheGravar(col,dados,diasBuscados,syncLocal);   // guarda a cada janela: se cair, não perde o que já veio
+        renderCal(); montarFiltros(); aplicar();
+      }
+      $('msg').textContent=`Mês ${rot}: ${regs} registros buscados em ${faltam.length} dia(s), às ${new Date().toLocaleTimeString('pt-BR')}. Total no cache: ${dados.length}.`
+        +(falhas?` Atenção: ${falhas} dia(s) não puderam ser compartilhados com os outros usuários.`:' Dias compartilhados com os outros usuários.');
+      atualizarUso();
+    }finally{ trab=false; $('colecao').disabled=false; }
+  }catch(e){ console.error(e); $('msg').textContent=traduzirErro(e.message); $('msg').classList.add('err'); }
+  finally{ $('buscarMes').disabled=false; $('carregar').disabled=false; }
+};
+$('limpar').onclick=async()=>{
+  if(!confirm('Apagar os dados em cache desta coleção? Os dias compartilhados por outros usuários serão baixados de novo.')) return;
+  await cacheApagar($('colecao').value);
+  await mostrarCache();
+  sincronizar();
+};
+$('calBtn').onclick=e=>{
+  e.stopPropagation();
+  const abrindo=$('cal').classList.contains('hide');
+  if(abrindo){
+    const sel=$('dataBuscar').value;
+    calMes=sel?new Date(sel+'T00:00:00'):new Date(); calMes.setDate(1);
+    renderCal();
+  }
+  $('cal').classList.toggle('hide');
+  if(abrindo && Date.now()-ultSync>15000) sincronizar();
+};
+$('cal').onclick=e=>{
+  e.stopPropagation();
+  const b=e.target.closest('button'); if(!b) return;
+  if(b.dataset.nav){ calMes=new Date(calMes.getFullYear(),calMes.getMonth()+(+b.dataset.nav),1); renderCal(); return; }
+  if(b.dataset.d){
+    $('dataBuscar').value=b.dataset.d;
+    const br=b.dataset.d.split('-').reverse().join('/');
+    $('msg').classList.remove('err');
+    $('msg').textContent=(diasBuscados.has(b.dataset.d)||indiceRemoto[b.dataset.d])
+      ? `O dia ${br} já foi buscado. Para ver os dados, escolha o mês no filtro "Mês".`
+      : `Dia ${br} selecionado (ainda não buscado). Clique em "Buscar no Firebase".`;
+    renderCal(); $('cal').classList.add('hide');
+  }
+};
+document.addEventListener('click',()=>$('cal').classList.add('hide'));
+['fData','fServ','fCid','fRec'].forEach(i=>$(i).onchange=aplicar);
+// Escolher um mês baixa de uma vez todos os dias desse mês que outros usuários já compartilharam.
+$('fMes').onchange=async()=>{ const mes=$('fMes').value; if(mes) await sincronizar(true,mes); opcoesData(); aplicar(); };
+$('sincBtn').onclick=()=>sincronizar(true);
+$('usoBtn').onclick=atualizarUso;
+$('usoCfg').onclick=ajustarUso;
+$('apagarBtn').onclick=apagarMes;
+// Verifica a cada 3 min se outro usuário buscou um dia novo (1 leitura por verificação).
+setInterval(()=>{ if(!document.hidden && token) sincronizar(); },180000);
+$('busca').oninput=aplicar;
+$('xlsx').onclick=exportarXLSX;
+$('prev').onclick=()=>{pagina--;render();};
+$('next').onclick=()=>{pagina++;render();};
+$('thead').onclick=e=>{
+  const c=e.target.dataset?.c; if(!c) return;
+  ordem={col:c,asc:ordem.col===c?!ordem.asc:true}; aplicar();
+};
+try{$('email').value=localStorage.getItem('igua_email')||'';}catch(e){}
 </script>
 </body>
 </html>
